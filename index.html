@@ -1,0 +1,1762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Attendance - Staff Management System</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        brand: { 50:'#ECFDF5',100:'#D1FAE5',200:'#A7F3D0',300:'#6EE7B7',400:'#34D399',500:'#10B981',600:'#059669',700:'#047857',800:'#065F46',900:'#064E3B' },
+        surface: { 50:'#F8FAFC',100:'#F1F5F9',200:'#E2E8F0',300:'#CBD5E1',700:'#1E2440',800:'#161B2E',900:'#0F1629',950:'#0B0F1A' },
+        gold: { 400:'#FACC15',500:'#EAB308',600:'#CA8A04' }
+      },
+      fontFamily: { display:['Outfit','sans-serif'], body:['DM Sans','sans-serif'] }
+    }
+  }
+}
+</script>
+<style>
+:root {
+  --bg: #0B0F1A; --surface: #111827; --card: #1F2937; --border: #374151;
+  --text: #F9FAFB; --muted: #9CA3AF; --primary: #10B981; --primary-dark: #059669;
+  --accent: #EAB308; --danger: #EF4444; --warning: #F59E0B; --success: #10B981;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; overflow-x:hidden; }
+h1,h2,h3,h4,h5,h6 { font-family:'Outfit',sans-serif; }
+.page { display:none; min-height:100vh; }
+.page.active { display:block; }
+.admin-view { display:none; }
+.admin-view.active { display:block; }
+
+/* 滚动条 */
+::-webkit-scrollbar { width:6px; height:6px; }
+::-webkit-scrollbar-track { background:var(--surface); }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background:#4B5563; }
+
+/* 登录页动画背景 */
+.login-brand { position:relative; overflow:hidden; }
+.login-brand::before {
+  content:''; position:absolute; top:-50%; left:-50%; width:200%; height:200%;
+  background:radial-gradient(circle at 30% 50%, rgba(16,185,129,0.15) 0%, transparent 50%),
+             radial-gradient(circle at 70% 80%, rgba(234,179,8,0.1) 0%, transparent 50%);
+  animation: loginGlow 8s ease-in-out infinite alternate;
+}
+@keyframes loginGlow {
+  0% { transform:translate(0,0) rotate(0deg); }
+  100% { transform:translate(-5%,5%) rotate(3deg); }
+}
+
+/* 浮动圆圈装饰 */
+.float-circle {
+  position:absolute; border-radius:50%; opacity:0.1; animation:floatUp 12s ease-in-out infinite;
+}
+.float-circle:nth-child(1) { width:300px;height:300px;background:var(--primary);top:10%;left:-10%;animation-delay:0s; }
+.float-circle:nth-child(2) { width:200px;height:200px;background:var(--accent);bottom:10%;right:-5%;animation-delay:4s; }
+.float-circle:nth-child(3) { width:150px;height:150px;background:var(--primary);top:60%;left:40%;animation-delay:8s; }
+@keyframes floatUp {
+  0%,100% { transform:translateY(0) scale(1); }
+  50% { transform:translateY(-30px) scale(1.05); }
+}
+
+/* 打卡按钮脉冲 */
+.checkin-btn { position:relative; }
+.checkin-btn::after {
+  content:''; position:absolute; inset:-4px; border-radius:50%;
+  border:2px solid var(--primary); opacity:0; animation:pulse-ring 2s ease-out infinite;
+}
+.checkin-btn.checked-in::after { border-color:var(--accent); }
+@keyframes pulse-ring {
+  0% { transform:scale(1); opacity:0.6; }
+  100% { transform:scale(1.3); opacity:0; }
+}
+
+/* Toast */
+.toast-container { position:fixed; top:20px; right:20px; z-index:9999; display:flex; flex-direction:column; gap:8px; }
+.toast {
+  padding:12px 20px; border-radius:10px; color:#fff; font-size:14px; font-weight:500;
+  transform:translateX(120%); transition:transform 0.3s ease; max-width:380px;
+  display:flex; align-items:center; gap:10px; box-shadow:0 8px 24px rgba(0,0,0,0.3);
+}
+.toast.show { transform:translateX(0); }
+.toast.success { background:#059669; }
+.toast.error { background:#DC2626; }
+.toast.warning { background:#D97706; }
+.toast.info { background:#2563EB; }
+
+/* 模态框 */
+.modal-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,0.7); backdrop-filter:blur(4px);
+  z-index:1000; display:none; align-items:center; justify-content:center; padding:20px;
+}
+.modal-overlay.active { display:flex; }
+.modal-content {
+  background:var(--surface); border:1px solid var(--border); border-radius:16px;
+  width:100%; max-width:520px; max-height:90vh; overflow-y:auto;
+  transform:scale(0.9); opacity:0; transition:all 0.3s ease;
+}
+.modal-overlay.active .modal-content { transform:scale(1); opacity:1; }
+
+/* 侧边栏 */
+.sidebar { transition:transform 0.3s ease; }
+.sidebar-link {
+  display:flex; align-items:center; gap:12px; padding:10px 16px; border-radius:10px;
+  color:var(--muted); transition:all 0.2s; cursor:pointer; font-size:14px; margin:2px 0;
+}
+.sidebar-link:hover { color:var(--text); background:rgba(255,255,255,0.05); }
+.sidebar-link.active { color:var(--primary); background:rgba(16,185,129,0.1); border-left:3px solid var(--primary); }
+
+/* 卡片悬停 */
+.stat-card { transition:transform 0.2s, box-shadow 0.2s; }
+.stat-card:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,0.2); }
+
+/* 表格行悬停 */
+.data-row { transition:background 0.15s; }
+.data-row:hover { background:rgba(255,255,255,0.03); }
+
+/* 输入框聚焦 */
+.form-input:focus { border-color:var(--primary); box-shadow:0 0 0 3px rgba(16,185,129,0.15); }
+
+/* 状态徽章 */
+.badge { padding:4px 10px; border-radius:20px; font-size:12px; font-weight:600; display:inline-block; }
+.badge-present { background:rgba(16,185,129,0.15); color:#34D399; }
+.badge-late { background:rgba(245,158,11,0.15); color:#FBBF24; }
+.badge-absent { background:rgba(239,68,68,0.15); color:#F87171; }
+.badge-early { background:rgba(249,115,22,0.15); color:#FB923C; }
+.badge-checked-in { background:rgba(16,185,129,0.15); color:#34D399; }
+
+/* 响应式侧边栏 */
+@media(max-width:1024px) {
+  .sidebar { position:fixed; z-index:500; transform:translateX(-100%); }
+  .sidebar.open { transform:translateX(0); }
+  .sidebar-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:499; }
+  .sidebar-overlay.open { display:block; }
+}
+
+/* 网络状态指示器 */
+.net-indicator { width:10px; height:10px; border-radius:50%; display:inline-block; }
+.net-ok { background:#10B981; box-shadow:0 0 8px rgba(16,185,129,0.5); }
+.net-fail { background:#EF4444; box-shadow:0 0 8px rgba(239,68,68,0.5); }
+.net-checking { background:#F59E0B; animation:blink 1s infinite; }
+@keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+
+/* 渐入动画 */
+@keyframes fadeIn { from{opacity:0;transform:translateY(10px);} to{opacity:1;transform:translateY(0);} }
+.fade-in { animation:fadeIn 0.4s ease forwards; }
+
+/* 时钟样式 */
+.clock-display { font-variant-numeric:tabular-nums; letter-spacing:2px; }
+
+/* 开关样式 */
+.toggle-switch {
+  position:relative; width:44px; height:24px; background:var(--border); border-radius:12px;
+  cursor:pointer; transition:background 0.3s;
+}
+.toggle-switch.active { background:var(--primary); }
+.toggle-switch::after {
+  content:''; position:absolute; top:2px; left:2px; width:20px; height:20px;
+  background:#fff; border-radius:50%; transition:transform 0.3s;
+}
+.toggle-switch.active::after { transform:translateX(20px); }
+
+@media print { .no-print{display:none!important;} }
+</style>
+</head>
+<body>
+
+<!-- Toast 容器 -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ==================== 登录页 ==================== -->
+<div id="loginPage" class="page active">
+  <div class="flex min-h-screen">
+    <!-- 左侧品牌区 -->
+    <div class="login-brand hidden lg:flex lg:w-1/2 bg-gradient-to-br from-brand-900 via-brand-800 to-brand-700 flex-col justify-center items-center p-12 relative">
+      <div class="float-circle"></div>
+      <div class="float-circle"></div>
+      <div class="float-circle"></div>
+      <div class="relative z-10 text-center">
+        <div class="w-20 h-20 bg-brand-500 rounded-2xl flex items-center justify-center mx-auto mb-8 shadow-lg shadow-brand-500/30">
+          <i class="fas fa-fingerprint text-4xl text-white"></i>
+        </div>
+        <h1 id="loginCompanyName" class="text-5xl font-extrabold text-white mb-4 font-display">Attendance</h1>
+        <p class="text-brand-200 text-lg max-w-md">Staff Attendance Management System with secure office network verification</p>
+        <div class="mt-12 flex gap-8 justify-center text-brand-300 text-sm">
+          <div class="text-center"><i class="fas fa-wifi text-2xl mb-2 text-brand-400"></i><br>WiFi Verification</div>
+          <div class="text-center"><i class="fas fa-shield-halved text-2xl mb-2 text-brand-400"></i><br>Secure Auth</div>
+          <div class="text-center"><i class="fas fa-chart-line text-2xl mb-2 text-brand-400"></i><br>Live Reports</div>
+        </div>
+      </div>
+    </div>
+    <!-- 右侧登录表单 -->
+    <div class="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 bg-surface-950">
+      <div class="w-full max-w-md">
+        <div class="lg:hidden text-center mb-8">
+          <div class="w-14 h-14 bg-brand-500 rounded-xl flex items-center justify-center mx-auto mb-4">
+            <i class="fas fa-fingerprint text-2xl text-white"></i>
+          </div>
+          <h1 id="loginCompanyNameMobile" class="text-3xl font-bold font-display">Attendance</h1>
+        </div>
+        <!-- 角色选项卡 -->
+        <div class="flex bg-surface-800 rounded-xl p-1 mb-8">
+          <button onclick="switchLoginTab('staff')" id="staffTabBtn" class="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all bg-brand-600 text-white">
+            <i class="fas fa-user mr-2"></i>Staff
+          </button>
+          <button onclick="switchLoginTab('admin')" id="adminTabBtn" class="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all text-gray-400">
+            <i class="fas fa-user-shield mr-2"></i>Admin
+          </button>
+        </div>
+        <form id="loginForm" onsubmit="handleLogin(event)">
+          <div class="mb-5">
+            <label class="block text-sm font-medium text-gray-300 mb-2">Username</label>
+            <div class="relative">
+              <i class="fas fa-user absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"></i>
+              <input type="text" id="loginUsername" class="form-input w-full bg-surface-800 border border-gray-700 rounded-xl py-3 pl-10 pr-4 text-white placeholder-gray-500 focus:outline-none transition-all" placeholder="Enter username" required>
+            </div>
+          </div>
+          <div class="mb-6">
+            <label class="block text-sm font-medium text-gray-300 mb-2">Password</label>
+            <div class="relative">
+              <i class="fas fa-lock absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"></i>
+              <input type="password" id="loginPassword" class="form-input w-full bg-surface-800 border border-gray-700 rounded-xl py-3 pl-10 pr-4 text-white placeholder-gray-500 focus:outline-none transition-all" placeholder="Enter password" required>
+              <button type="button" onclick="togglePasswordVisibility()" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"><i id="eyeIcon" class="fas fa-eye"></i></button>
+            </div>
+          </div>
+          <div id="loginError" class="hidden mb-4 p-3 bg-red-900/30 border border-red-800 rounded-lg text-red-400 text-sm"></div>
+          <button type="submit" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 rounded-xl transition-all shadow-lg shadow-brand-600/20 active:scale-[0.98]">
+            Sign In <i class="fas fa-arrow-right ml-2"></i>
+          </button>
+        </form>
+        <p class="text-center text-gray-500 text-xs mt-8">Default: admin / admin123 &nbsp;|&nbsp; staff: john / pass123</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 员工仪表板 ==================== -->
+<div id="staffPage" class="page">
+  <header class="bg-surface-900 border-b border-gray-800 px-4 sm:px-6 py-4 flex items-center justify-between sticky top-0 z-50">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 bg-brand-500 rounded-lg flex items-center justify-center"><i class="fas fa-fingerprint text-white"></i></div>
+      <h2 id="staffCompanyName" class="text-lg font-bold font-display">Attendance</h2>
+    </div>
+    <div class="flex items-center gap-4">
+      <span id="staffName" class="text-sm text-gray-300 hidden sm:block"></span>
+      <button onclick="logout()" class="text-gray-400 hover:text-red-400 transition-colors" title="Logout"><i class="fas fa-right-from-bracket text-lg"></i></button>
+    </div>
+  </header>
+  <main class="max-w-2xl mx-auto p-4 sm:p-6 space-y-6">
+    <!-- 日期时间 -->
+    <div class="text-center fade-in">
+      <p id="staffDate" class="text-gray-400 text-sm mb-1"></p>
+      <h1 id="staffTime" class="clock-display text-5xl sm:text-6xl font-extrabold font-display text-white"></h1>
+    </div>
+    <!-- 网络验证状态 -->
+    <div id="networkStatus" class="bg-surface-800 border border-gray-700 rounded-xl p-4 flex flex-col gap-3 fade-in">
+      <div class="flex items-center gap-3">
+        <span id="netIndicator" class="net-indicator net-checking"></span>
+        <div>
+          <p id="netStatusText" class="text-sm font-medium">Checking network...</p>
+          <p id="netDetailText" class="text-xs text-gray-500"></p>
+        </div>
+        <button onclick="checkNetwork()" class="ml-auto text-xs text-brand-400 hover:text-brand-300"><i class="fas fa-refresh mr-1"></i>Recheck</button>
+      </div>
+      <!-- Connection Simulation for Browser Environments -->
+      <div class="border-t border-gray-700/50 pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+        <span class="text-gray-400 flex items-center gap-1"><i class="fas fa-flask text-brand-400"></i>Simulate Connection:</span>
+        <select id="simulatedNetwork" onchange="checkNetwork()" class="bg-surface-900 border border-gray-700 text-gray-300 rounded px-2 py-1 focus:outline-none focus:border-brand-500 transition-colors">
+          <option value="authorized">Go Getters 5G (Authorized Wi-Fi)</option>
+          <option value="other">Home-WiFi (Unauthorized Wi-Fi)</option>
+          <option value="mobile">Mobile Data / Offline</option>
+        </select>
+      </div>
+    </div>
+    <!-- 打卡按钮 -->
+    <div class="flex justify-center py-4 fade-in">
+      <button id="checkinBtn" onclick="handleCheckIn()" class="checkin-btn w-40 h-40 rounded-full bg-brand-600 hover:bg-brand-500 text-white flex flex-col items-center justify-center transition-all shadow-xl shadow-brand-600/20 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed" disabled>
+        <i id="checkinIcon" class="fas fa-right-to-bracket text-3xl mb-2"></i>
+        <span id="checkinText" class="font-semibold text-sm">Check In</span>
+      </button>
+    </div>
+    <!-- 今日状态 -->
+    <div id="todayStatus" class="bg-surface-800 border border-gray-700 rounded-xl p-5 fade-in">
+      <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Today's Record</h3>
+      <div class="grid grid-cols-3 gap-4 text-center">
+        <div>
+          <p class="text-xs text-gray-500 mb-1">Check In</p>
+          <p id="todayCheckIn" class="text-lg font-bold text-brand-400">--:--</p>
+        </div>
+        <div>
+          <p class="text-xs text-gray-500 mb-1">Check Out</p>
+          <p id="todayCheckOut" class="text-lg font-bold text-gold-400">--:--</p>
+        </div>
+        <div>
+          <p class="text-xs text-gray-500 mb-1">Status</p>
+          <p id="todayStatusBadge" class="text-sm font-bold mt-1"><span class="badge badge-absent">Not Checked In</span></p>
+        </div>
+      </div>
+    </div>
+    <!-- 最近记录 -->
+    <div class="bg-surface-800 border border-gray-700 rounded-xl p-5 fade-in">
+      <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Recent Attendance</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead><tr class="text-gray-500 text-xs border-b border-gray-700">
+            <th class="pb-2 text-left font-medium">Date</th><th class="pb-2 text-left font-medium">In</th><th class="pb-2 text-left font-medium">Out</th><th class="pb-2 text-left font-medium">Status</th>
+          </tr></thead>
+          <tbody id="recentAttBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ==================== 管理员面板 ==================== -->
+<div id="adminPage" class="page">
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+  <div class="flex min-h-screen">
+    <!-- 侧边栏 -->
+    <aside id="adminSidebar" class="sidebar w-64 bg-surface-950 border-r border-gray-800 flex flex-col fixed lg:sticky top-0 h-screen z-[500]">
+      <div class="p-5 border-b border-gray-800">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 bg-brand-500 rounded-lg flex items-center justify-center"><i class="fas fa-fingerprint text-white"></i></div>
+          <h2 id="adminCompanyName" class="text-base font-bold font-display truncate">Attendance</h2>
+        </div>
+      </div>
+      <nav class="flex-1 p-3 space-y-1">
+        <div onclick="showAdminView('dashboard')" class="sidebar-link active" data-view="dashboard"><i class="fas fa-chart-pie w-5 text-center"></i>Dashboard</div>
+        <div onclick="showAdminView('staff')" class="sidebar-link" data-view="staff"><i class="fas fa-users w-5 text-center"></i>Staff</div>
+        <div onclick="showAdminView('attendance')" class="sidebar-link" data-view="attendance"><i class="fas fa-calendar-check w-5 text-center"></i>Attendance</div>
+        <div onclick="showAdminView('reports')" class="sidebar-link" data-view="reports"><i class="fas fa-file-lines w-5 text-center"></i>Reports</div>
+        <div onclick="showAdminView('settings')" class="sidebar-link" data-view="settings"><i class="fas fa-gear w-5 text-center"></i>Settings</div>
+      </nav>
+      <div class="p-4 border-t border-gray-800">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-8 h-8 bg-brand-600 rounded-full flex items-center justify-center text-xs font-bold text-white">A</div>
+          <div><p class="text-sm font-medium">Admin</p><p class="text-xs text-gray-500">Administrator</p></div>
+        </div>
+        <button onclick="logout()" class="w-full text-left text-sm text-gray-400 hover:text-red-400 transition-colors py-2"><i class="fas fa-right-from-bracket mr-2"></i>Logout</button>
+      </div>
+    </aside>
+    <!-- 主内容 -->
+    <div class="flex-1 min-w-0">
+      <header class="bg-surface-900/80 backdrop-blur border-b border-gray-800 px-4 sm:px-6 py-4 flex items-center justify-between sticky top-0 z-40">
+        <div class="flex items-center gap-3">
+          <button onclick="openSidebar()" class="lg:hidden text-gray-400 hover:text-white"><i class="fas fa-bars text-xl"></i></button>
+          <h2 id="adminPageTitle" class="text-lg font-bold font-display">Dashboard</h2>
+        </div>
+        <div class="text-sm text-gray-400" id="adminDateTime"></div>
+      </header>
+      <main class="p-4 sm:p-6">
+        <!-- 管理员仪表板 -->
+        <div id="view-dashboard" class="admin-view active">
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div class="stat-card bg-surface-800 border border-gray-700 rounded-xl p-5">
+              <div class="flex items-center justify-between mb-3"><span class="text-xs text-gray-500 uppercase tracking-wider">Total Staff</span><div class="w-8 h-8 bg-blue-500/15 rounded-lg flex items-center justify-center"><i class="fas fa-users text-blue-400 text-sm"></i></div></div>
+              <p id="statTotal" class="text-3xl font-extrabold font-display">0</p>
+            </div>
+            <div class="stat-card bg-surface-800 border border-gray-700 rounded-xl p-5">
+              <div class="flex items-center justify-between mb-3"><span class="text-xs text-gray-500 uppercase tracking-wider">Present</span><div class="w-8 h-8 bg-brand-500/15 rounded-lg flex items-center justify-center"><i class="fas fa-circle-check text-brand-400 text-sm"></i></div></div>
+              <p id="statPresent" class="text-3xl font-extrabold font-display text-brand-400">0</p>
+            </div>
+            <div class="stat-card bg-surface-800 border border-gray-700 rounded-xl p-5">
+              <div class="flex items-center justify-between mb-3"><span class="text-xs text-gray-500 uppercase tracking-wider">Absent</span><div class="w-8 h-8 bg-red-500/15 rounded-lg flex items-center justify-center"><i class="fas fa-circle-xmark text-red-400 text-sm"></i></div></div>
+              <p id="statAbsent" class="text-3xl font-extrabold font-display text-red-400">0</p>
+            </div>
+            <div class="stat-card bg-surface-800 border border-gray-700 rounded-xl p-5">
+              <div class="flex items-center justify-between mb-3"><span class="text-xs text-gray-500 uppercase tracking-wider">Late</span><div class="w-8 h-8 bg-yellow-500/15 rounded-lg flex items-center justify-center"><i class="fas fa-clock text-yellow-400 text-sm"></i></div></div>
+              <p id="statLate" class="text-3xl font-extrabold font-display text-yellow-400">0</p>
+            </div>
+          </div>
+          <div class="grid lg:grid-cols-2 gap-6">
+            <div class="bg-surface-800 border border-gray-700 rounded-xl p-5">
+              <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Weekly Attendance Trend</h3>
+              <canvas id="weeklyChart" height="220"></canvas>
+            </div>
+            <div class="bg-surface-800 border border-gray-700 rounded-xl p-5">
+              <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Department Distribution</h3>
+              <canvas id="deptChart" height="220"></canvas>
+            </div>
+          </div>
+          <div class="mt-6 bg-surface-800 border border-gray-700 rounded-xl p-5">
+            <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Today's Late Arrivals</h3>
+            <div id="lateArrivalsList" class="space-y-2"></div>
+          </div>
+        </div>
+
+        <!-- 员工管理 -->
+        <div id="view-staff" class="admin-view">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+            <div class="relative flex-1 max-w-sm">
+              <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm"></i>
+              <input type="text" id="staffSearch" oninput="renderStaffTable()" class="form-input w-full bg-surface-800 border border-gray-700 rounded-lg py-2.5 pl-9 pr-4 text-sm text-white placeholder-gray-500 focus:outline-none transition-all" placeholder="Search staff...">
+            </div>
+            <button onclick="openStaffModal()" class="bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition-all"><i class="fas fa-plus mr-2"></i>Add Staff</button>
+          </div>
+          <div class="bg-surface-800 border border-gray-700 rounded-xl overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead><tr class="text-gray-500 text-xs uppercase border-b border-gray-700 bg-surface-900/50">
+                  <th class="px-4 py-3 text-left font-medium">Name</th><th class="px-4 py-3 text-left font-medium">Username</th><th class="px-4 py-3 text-left font-medium">Department</th><th class="px-4 py-3 text-left font-medium hidden sm:table-cell">Email</th><th class="px-4 py-3 text-left font-medium">Status</th><th class="px-4 py-3 text-center font-medium">Actions</th>
+                </tr></thead>
+                <tbody id="staffTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 每日考勤 -->
+        <div id="view-attendance" class="admin-view">
+          <div class="flex flex-col sm:flex-row gap-3 mb-5">
+            <input type="date" id="attDateFilter" onchange="renderAttendanceTable()" class="form-input bg-surface-800 border border-gray-700 rounded-lg py-2.5 px-4 text-sm text-white focus:outline-none transition-all">
+            <input type="text" id="attSearchFilter" oninput="renderAttendanceTable()" class="form-input bg-surface-800 border border-gray-700 rounded-lg py-2.5 px-4 text-sm text-white placeholder-gray-500 focus:outline-none transition-all" placeholder="Search by name...">
+            <select id="attStatusFilter" onchange="renderAttendanceTable()" class="form-input bg-surface-800 border border-gray-700 rounded-lg py-2.5 px-4 text-sm text-white focus:outline-none transition-all">
+              <option value="">All Status</option><option value="Present">Present</option><option value="Late">Late</option><option value="Absent">Absent</option><option value="Early Departure">Early Departure</option>
+            </select>
+          </div>
+          <div class="bg-surface-800 border border-gray-700 rounded-xl overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead><tr class="text-gray-500 text-xs uppercase border-b border-gray-700 bg-surface-900/50">
+                  <th class="px-4 py-3 text-left font-medium">Employee</th><th class="px-4 py-3 text-left font-medium">Check In</th><th class="px-4 py-3 text-left font-medium">Check Out</th><th class="px-4 py-3 text-left font-medium">Status</th><th class="px-4 py-3 text-left font-medium hidden md:table-cell">IP Address</th><th class="px-4 py-3 text-left font-medium hidden lg:table-cell">Device</th>
+                </tr></thead>
+                <tbody id="attTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 月度报告 -->
+        <div id="view-reports" class="admin-view">
+          <div class="flex flex-col sm:flex-row gap-3 mb-5">
+            <select id="reportMonth" onchange="renderReport()" class="form-input bg-surface-800 border border-gray-700 rounded-lg py-2.5 px-4 text-sm text-white focus:outline-none transition-all"></select>
+            <select id="reportYear" onchange="renderReport()" class="form-input bg-surface-800 border border-gray-700 rounded-lg py-2.5 px-4 text-sm text-white focus:outline-none transition-all"></select>
+            <input type="text" id="reportSearch" oninput="renderReport()" class="form-input bg-surface-800 border border-gray-700 rounded-lg py-2.5 px-4 text-sm text-white placeholder-gray-500 focus:outline-none transition-all" placeholder="Search employee...">
+          </div>
+          <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
+            <div class="bg-surface-800 border border-gray-700 rounded-lg p-3 text-center"><p class="text-xs text-gray-500">Working Days</p><p id="rpWorkingDays" class="text-xl font-bold font-display">0</p></div>
+            <div class="bg-surface-800 border border-gray-700 rounded-lg p-3 text-center"><p class="text-xs text-gray-500">Present</p><p id="rpPresent" class="text-xl font-bold font-display text-brand-400">0</p></div>
+            <div class="bg-surface-800 border border-gray-700 rounded-lg p-3 text-center"><p class="text-xs text-gray-500">Absent</p><p id="rpAbsent" class="text-xl font-bold font-display text-red-400">0</p></div>
+            <div class="bg-surface-800 border border-gray-700 rounded-lg p-3 text-center"><p class="text-xs text-gray-500">Late</p><p id="rpLate" class="text-xl font-bold font-display text-yellow-400">0</p></div>
+            <div class="bg-surface-800 border border-gray-700 rounded-lg p-3 text-center"><p class="text-xs text-gray-500">Early Dep.</p><p id="rpEarly" class="text-xl font-bold font-display text-orange-400">0</p></div>
+          </div>
+          <div class="flex gap-2 mb-4">
+            <button onclick="exportCSV()" class="bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all"><i class="fas fa-file-excel mr-1"></i>Export CSV</button>
+            <button onclick="exportPDF()" class="bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all"><i class="fas fa-file-pdf mr-1"></i>Export PDF</button>
+          </div>
+          <div class="bg-surface-800 border border-gray-700 rounded-xl overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead><tr class="text-gray-500 text-xs uppercase border-b border-gray-700 bg-surface-900/50">
+                  <th class="px-3 py-3 text-left font-medium">Employee</th><th class="px-3 py-3 text-left font-medium">Dept</th><th class="px-3 py-3 text-center font-medium">Present</th><th class="px-3 py-3 text-center font-medium">Late</th><th class="px-3 py-3 text-center font-medium">Absent</th><th class="px-3 py-3 text-center font-medium">Early</th><th class="px-3 py-3 text-center font-medium">Rate</th>
+                </tr></thead>
+                <tbody id="reportTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 系统设置 -->
+        <div id="view-settings" class="admin-view">
+          <div class="max-w-2xl space-y-6">
+            <!-- 公司信息 -->
+            <div class="bg-surface-800 border border-gray-700 rounded-xl p-5">
+              <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4"><i class="fas fa-building mr-2"></i>Company Information</h3>
+              <div>
+                <label class="block text-sm text-gray-300 mb-1">Company Name</label>
+                <input type="text" id="setCompanyName" class="form-input w-full bg-surface-900 border border-gray-700 rounded-lg py-2.5 px-4 text-sm text-white focus:outline-none transition-all" placeholder="Company Name">
+              </div>
+            </div>
+            <!-- 验证模式 -->
+            <div class="bg-surface-800 border border-gray-700 rounded-xl p-5">
+              <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4"><i class="fas fa-shield-halved mr-2"></i>Attendance Verification</h3>
+              <div class="mb-4">
+                <label class="block text-sm text-gray-300 mb-2">Verification Mode</label>
+                <select id="setVerifyMode" class="form-input w-full bg-surface-900 border border-gray-700 rounded-lg py-2.5 px-4 text-sm text-white focus:outline-none transition-all">
+                  <option value="ssid">SSID Only</option><option value="bssid">MAC Address (BSSID) Only</option><option value="ssid_bssid">SSID + MAC Address</option>
+                </select>
+              </div>
+              <div class="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm text-gray-300 mb-1">Office Wi-Fi SSID</label>
+                  <input type="text" id="setSSID" class="form-input w-full bg-surface-900 border border-gray-700 rounded-lg py-2.5 px-4 text-sm text-white focus:outline-none transition-all" placeholder="e.g. OfficeWiFi-5G">
+                </div>
+                <div>
+                  <label class="block text-sm text-gray-300 mb-1">Router BSSID / MAC</label>
+                  <input type="text" id="setBSSID" class="form-input w-full bg-surface-900 border border-gray-700 rounded-lg py-2.5 px-4 text-sm text-white focus:outline-none transition-all" placeholder="e.g. 00:1A:2B:3C:4D:5E">
+                </div>
+              </div>
+              <div class="mt-4">
+                <label class="block text-sm text-gray-300 mb-1">Office Public IP (Optional)</label>
+                <input type="text" id="setPublicIP" class="form-input w-full bg-surface-900 border border-gray-700 rounded-lg py-2.5 px-4 text-sm text-white focus:outline-none transition-all" placeholder="e.g. 203.0.113.50">
+              </div>
+            </div>
+            <!-- 工作时间 -->
+            <div class="bg-surface-800 border border-gray-700 rounded-xl p-5">
+              <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4"><i class="fas fa-clock mr-2"></i>Working Hours & Rules</h3>
+              <div class="grid sm:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label class="block text-sm text-gray-300 mb-1">Work Start Time</label>
+                  <input type="time" id="setWorkStart" class="form-input w-full bg-surface-900 border border-gray-700 rounded-lg py-2.5 px-4 text-sm text-white focus:outline-none transition-all">
+                </div>
+                <div>
+                  <label class="block text-sm text-gray-300 mb-1">Work End Time</label>
+                  <input type="time" id="setWorkEnd" class="form-input w-full bg-surface-900 border border-gray-700 rounded-lg py-2.5 px-4 text-sm text-white focus:outline-none transition-all">
+                </div>
+              </div>
+              <div class="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm text-gray-300 mb-1">Late Threshold (minutes)</label>
+                  <input type="number" id="setLateThreshold" min="1" max="60" class="form-input w-full bg-surface-900 border border-gray-700 rounded-lg py-2.5 px-4 text-sm text-white focus:outline-none transition-all">
+                </div>
+                <div>
+                  <label class="block text-sm text-gray-300 mb-1">Early Departure Threshold (minutes)</label>
+                  <input type="number" id="setEarlyThreshold" min="1" max="60" class="form-input w-full bg-surface-900 border border-gray-700 rounded-lg py-2.5 px-4 text-sm text-white focus:outline-none transition-all">
+                </div>
+              </div>
+            </div>
+            <!-- 演示模式 -->
+            <div class="bg-surface-800 border border-gray-700 rounded-xl p-5">
+              <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4"><i class="fas fa-flask mr-2"></i>Demo Mode</h3>
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-sm text-gray-300">Enable Demo Mode</p>
+                  <p class="text-xs text-gray-500">Bypass network verification for testing</p>
+                </div>
+                <div id="demoToggle" onclick="toggleDemoMode()" class="toggle-switch"></div>
+              </div>
+            </div>
+            <!-- 多地点（未来） -->
+            <div class="bg-surface-800 border border-gray-700 rounded-xl p-5 opacity-50">
+              <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4"><i class="fas fa-location-dot mr-2"></i>Multiple Office Locations <span class="text-xs text-brand-400 ml-2">Coming Soon</span></h3>
+              <p class="text-sm text-gray-500">Support for multiple authorized SSIDs and BSSIDs for different office branches will be available in a future update.</p>
+            </div>
+            <button onclick="saveSettings()" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 rounded-xl transition-all shadow-lg shadow-brand-600/20"><i class="fas fa-save mr-2"></i>Save Settings</button>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 员工编辑模态框 ==================== -->
+<div id="staffModal" class="modal-overlay">
+  <div class="modal-content">
+    <div class="p-5 border-b border-gray-700 flex items-center justify-between">
+      <h3 id="staffModalTitle" class="text-lg font-bold font-display">Add Staff</h3>
+      <button onclick="closeStaffModal()" class="text-gray-400 hover:text-white"><i class="fas fa-xmark text-xl"></i></button>
+    </div>
+    <form id="staffForm" onsubmit="saveStaff(event)" class="p-5 space-y-4">
+      <input type="hidden" id="sfId">
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div><label class="block text-sm text-gray-300 mb-1">Full Name *</label><input type="text" id="sfName" class="form-input w-full bg-surface-900 border border-gray-700 rounded-lg py-2.5 px-4 text-sm text-white focus:outline-none transition-all" required></div>
+        <div><label class="block text-sm text-gray-300 mb-1">Username *</label><input type="text" id="sfUsername" class="form-input w-full bg-surface-900 border border-gray-700 rounded-lg py-2.5 px-4 text-sm text-white focus:outline-none transition-all" required></div>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div><label class="block text-sm text-gray-300 mb-1">Password <span id="sfPwdHint" class="text-xs text-gray-500">(leave blank to keep)</span></label><input type="password" id="sfPassword" class="form-input w-full bg-surface-900 border border-gray-700 rounded-lg py-2.5 px-4 text-sm text-white focus:outline-none transition-all"></div>
+        <div><label class="block text-sm text-gray-300 mb-1">Department *</label><input type="text" id="sfDepartment" class="form-input w-full bg-surface-900 border border-gray-700 rounded-lg py-2.5 px-4 text-sm text-white focus:outline-none transition-all" required></div>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div><label class="block text-sm text-gray-300 mb-1">Email</label><input type="email" id="sfEmail" class="form-input w-full bg-surface-900 border border-gray-700 rounded-lg py-2.5 px-4 text-sm text-white focus:outline-none transition-all"></div>
+        <div><label class="block text-sm text-gray-300 mb-1">Phone</label><input type="text" id="sfPhone" class="form-input w-full bg-surface-900 border border-gray-700 rounded-lg py-2.5 px-4 text-sm text-white focus:outline-none transition-all"></div>
+      </div>
+      <div class="flex items-center gap-3">
+        <input type="checkbox" id="sfActive" checked class="w-4 h-4 rounded accent-emerald-500">
+        <label for="sfActive" class="text-sm text-gray-300">Active Account</label>
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button type="button" onclick="closeStaffModal()" class="flex-1 bg-surface-700 hover:bg-surface-600 text-gray-300 font-semibold py-2.5 rounded-lg transition-all">Cancel</button>
+        <button type="submit" class="flex-1 bg-brand-600 hover:bg-brand-700 text-white font-semibold py-2.5 rounded-lg transition-all">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ==================== 确认模态框 ==================== -->
+<div id="confirmModal" class="modal-overlay">
+  <div class="modal-content max-w-sm">
+    <div class="p-6 text-center">
+      <div class="w-14 h-14 bg-red-500/15 rounded-full flex items-center justify-center mx-auto mb-4"><i class="fas fa-triangle-exclamation text-red-400 text-2xl"></i></div>
+      <h3 id="confirmTitle" class="text-lg font-bold font-display mb-2">Confirm Delete</h3>
+      <p id="confirmMessage" class="text-sm text-gray-400 mb-6">Are you sure?</p>
+      <div class="flex gap-3">
+        <button onclick="closeConfirmModal()" class="flex-1 bg-surface-700 hover:bg-surface-600 text-gray-300 font-semibold py-2.5 rounded-lg transition-all">Cancel</button>
+        <button id="confirmAction" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-2.5 rounded-lg transition-all">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   全局变量与常量
+   ============================================================ */
+const STORAGE = {
+  STAFF: 'att_staff',
+  ATTENDANCE: 'att_attendance',
+  SETTINGS: 'att_settings',
+  SESSION: 'att_session'
+};
+
+const DEFAULT_SETTINGS = {
+  companyName: 'Attendance',
+  verificationMode: 'ssid',
+  officeSSID: 'Go Getters 5G',
+  officeBSSID: '00:1A:2B:3C:4D:5E',
+  officePublicIP: '',
+  workStart: '09:00',
+  workEnd: '18:00',
+  lateThreshold: 15,
+  earlyThreshold: 15,
+  demoMode: false
+};
+
+let currentUser = null;
+let loginRole = 'staff';
+let clockInterval = null;
+let weeklyChartInstance = null;
+let deptChartInstance = null;
+let networkVerified = false;
+
+/* ============================================================
+   工具函数
+   ============================================================ */
+
+// SHA-256 密码哈希
+async function hashPassword(pwd) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(pwd + '_att_salt_2024');
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// 获取当前日期字符串 YYYY-MM-DD
+function todayStr() {
+  return new Date().toISOString().split('T')[0];
+}
+
+// 获取当前时间字符串 HH:MM:SS
+function nowTimeStr() {
+  const d = new Date();
+  return d.toTimeString().split(' ')[0];
+}
+
+// 格式化日期显示
+function formatDate(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// 格式化时间显示
+function formatTime(timeStr) {
+  if (!timeStr) return '--:--';
+  const [h, m] = timeStr.split(':');
+  const hr = parseInt(h);
+  const ampm = hr >= 12 ? 'PM' : 'AM';
+  const hr12 = hr % 12 || 12;
+  return `${hr12}:${m} ${ampm}`;
+}
+
+// 获取简短设备信息
+function getDeviceInfo() {
+  const ua = navigator.userAgent;
+  if (ua.includes('Chrome') && !ua.includes('Edg')) return 'Chrome, ' + getOS(ua);
+  if (ua.includes('Firefox')) return 'Firefox, ' + getOS(ua);
+  if (ua.includes('Safari') && !ua.includes('Chrome')) return 'Safari, ' + getOS(ua);
+  if (ua.includes('Edg')) return 'Edge, ' + getOS(ua);
+  return 'Web Browser, ' + getOS(ua);
+}
+
+function getOS(ua) {
+  if (ua.includes('Windows')) return 'Windows';
+  if (ua.includes('Mac')) return 'macOS';
+  if (ua.includes('Linux')) return 'Linux';
+  if (ua.includes('Android')) return 'Android';
+  if (ua.includes('iPhone') || ua.includes('iPad')) return 'iOS';
+  return 'Unknown OS';
+}
+
+// 生成唯一 ID
+function genId() {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+}
+
+/* ============================================================
+   数据访问层 (localStorage)
+   ============================================================ */
+function getStaff() {
+  return JSON.parse(localStorage.getItem(STORAGE.STAFF) || '[]');
+}
+function saveStaffData(data) {
+  localStorage.setItem(STORAGE.STAFF, JSON.stringify(data));
+}
+function getAttendance() {
+  return JSON.parse(localStorage.getItem(STORAGE.ATTENDANCE) || '[]');
+}
+function saveAttendanceData(data) {
+  localStorage.setItem(STORAGE.ATTENDANCE, JSON.stringify(data));
+}
+function getSettings() {
+  return JSON.parse(localStorage.getItem(STORAGE.SETTINGS) || 'null') || { ...DEFAULT_SETTINGS };
+}
+function saveSettingsData(data) {
+  localStorage.setItem(STORAGE.SETTINGS, JSON.stringify(data));
+}
+
+/* ============================================================
+   Toast 通知
+   ============================================================ */
+function showToast(message, type = 'info') {
+  const container = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  const icons = { success: 'fa-circle-check', error: 'fa-circle-xmark', warning: 'fa-triangle-exclamation', info: 'fa-circle-info' };
+  toast.innerHTML = `<i class="fas ${icons[type] || icons.info}"></i><span>${message}</span>`;
+  container.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('show'));
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+}
+
+/* ============================================================
+   网络验证
+   ============================================================ */
+async function detectNetwork() {
+  const info = { ssid: 'Unknown', bssid: 'Unknown', ip: 'Unknown' };
+  
+  // Use simulated SSID if dropdown exists
+  const simSelect = document.getElementById('simulatedNetwork');
+  if (simSelect) {
+    const val = simSelect.value;
+    const settings = getSettings();
+    if (val === 'authorized') {
+      info.ssid = settings.officeSSID;
+      info.bssid = settings.officeBSSID;
+    } else if (val === 'other') {
+      info.ssid = 'Home-WiFi';
+      info.bssid = '11:22:33:44:55:66';
+    } else {
+      info.ssid = 'Mobile Data';
+      info.bssid = 'Unknown';
+    }
+  } else {
+    // 尝试 WiFi API（实验性，大多数浏览器不支持）
+    try {
+      if ('wifi' in navigator) {
+        info.ssid = navigator.wifi?.ssid || 'Unknown';
+        info.bssid = navigator.wifi?.bssid || 'Unknown';
+      }
+    } catch (e) {}
+  }
+
+  // 获取公网 IP
+  try {
+    const res = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(5000) });
+    const data = await res.json();
+    info.ip = data.ip;
+  } catch (e) { info.ip = 'Unavailable'; }
+  return info;
+}
+
+async function verifyNetwork() {
+  const settings = getSettings();
+  const netInfo = await detectNetwork();
+
+  if (settings.demoMode) {
+    return { verified: true, method: 'demo', ...netInfo, message: 'Demo mode - verification bypassed' };
+  }
+
+  // 基于验证模式检查
+  let ssidMatch = netInfo.ssid === settings.officeSSID;
+  let bssidMatch = netInfo.bssid === settings.officeBSSID;
+  let ipMatch = settings.officePublicIP && netInfo.ip === settings.officePublicIP;
+
+  switch (settings.verificationMode) {
+    case 'ssid':
+      if (ssidMatch) return { verified: true, method: 'ssid', ...netInfo, message: 'SSID verified' };
+      break;
+    case 'bssid':
+      if (bssidMatch) return { verified: true, method: 'bssid', ...netInfo, message: 'BSSID verified' };
+      break;
+    case 'ssid_bssid':
+      if (ssidMatch && bssidMatch) return { verified: true, method: 'ssid_bssid', ...netInfo, message: 'SSID + BSSID verified' };
+      break;
+  }
+
+  // IP 作为后备验证
+  if (ipMatch) return { verified: true, method: 'ip', ...netInfo, message: 'IP address verified' };
+
+  return { verified: false, method: 'none', ...netInfo, message: `You are not connected to the specified network (${settings.officeSSID}). Please connect to the authorized Wi-Fi network and try again.` };
+}
+
+async function checkNetwork() {
+  const indicator = document.getElementById('netIndicator');
+  const statusText = document.getElementById('netStatusText');
+  const detailText = document.getElementById('netDetailText');
+  const checkinBtn = document.getElementById('checkinBtn');
+
+  indicator.className = 'net-indicator net-checking';
+  statusText.textContent = 'Checking network...';
+  detailText.textContent = '';
+
+  const result = await verifyNetwork();
+  networkVerified = result.verified;
+
+  if (result.verified) {
+    indicator.className = 'net-indicator net-ok';
+    statusText.textContent = 'Network Verified';
+    detailText.textContent = `Method: ${result.method.toUpperCase()} | IP: ${result.ip}`;
+    checkinBtn.disabled = false;
+  } else {
+    indicator.className = 'net-indicator net-fail';
+    statusText.textContent = 'Verification Failed';
+    detailText.textContent = result.message;
+    checkinBtn.disabled = true;
+  }
+  return result;
+}
+
+/* ============================================================
+   认证系统
+   ============================================================ */
+async function handleLogin(e) {
+  e.preventDefault();
+  const username = document.getElementById('loginUsername').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errorDiv = document.getElementById('loginError');
+  errorDiv.classList.add('hidden');
+
+  if (!username || !password) {
+    errorDiv.textContent = 'Please fill in all fields.';
+    errorDiv.classList.remove('hidden');
+    return;
+  }
+
+  const hashedPwd = await hashPassword(password);
+  const staff = getStaff();
+
+  if (loginRole === 'admin') {
+    // 管理员认证
+    const admin = staff.find(s => s.role === 'admin' && s.username === username && s.password === hashedPwd);
+    if (!admin) {
+      errorDiv.textContent = 'Invalid admin credentials.';
+      errorDiv.classList.remove('hidden');
+      return;
+    }
+    currentUser = admin;
+    localStorage.setItem(STORAGE.SESSION, JSON.stringify({ id: admin.id, role: 'admin' }));
+    showPage('adminPage');
+    showAdminView('dashboard');
+  } else {
+    // 员工认证
+    const emp = staff.find(s => s.role === 'staff' && s.username === username && s.password === hashedPwd && s.active);
+    if (!emp) {
+      errorDiv.textContent = 'Invalid username or password, or account is disabled.';
+      errorDiv.classList.remove('hidden');
+      return;
+    }
+    currentUser = emp;
+    localStorage.setItem(STORAGE.SESSION, JSON.stringify({ id: emp.id, role: 'staff' }));
+    showPage('staffPage');
+    initStaffDashboard();
+  }
+}
+
+function logout() {
+  currentUser = null;
+  localStorage.removeItem(STORAGE.SESSION);
+  clearInterval(clockInterval);
+  showPage('loginPage');
+  document.getElementById('loginUsername').value = '';
+  document.getElementById('loginPassword').value = '';
+  document.getElementById('loginError').classList.add('hidden');
+}
+
+function switchLoginTab(role) {
+  loginRole = role;
+  const staffBtn = document.getElementById('staffTabBtn');
+  const adminBtn = document.getElementById('adminTabBtn');
+  if (role === 'staff') {
+    staffBtn.className = 'flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all bg-brand-600 text-white';
+    adminBtn.className = 'flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all text-gray-400';
+  } else {
+    adminBtn.className = 'flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all bg-brand-600 text-white';
+    staffBtn.className = 'flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all text-gray-400';
+  }
+}
+
+function togglePasswordVisibility() {
+  const input = document.getElementById('loginPassword');
+  const icon = document.getElementById('eyeIcon');
+  if (input.type === 'password') {
+    input.type = 'text';
+    icon.className = 'fas fa-eye-slash';
+  } else {
+    input.type = 'password';
+    icon.className = 'fas fa-eye';
+  }
+}
+
+/* ============================================================
+   页面导航
+   ============================================================ */
+function showPage(pageId) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(pageId).classList.add('active');
+}
+
+function showAdminView(viewName) {
+  document.querySelectorAll('.admin-view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-' + viewName).classList.add('active');
+  document.querySelectorAll('.sidebar-link').forEach(l => {
+    l.classList.toggle('active', l.dataset.view === viewName);
+  });
+  const titles = { dashboard: 'Dashboard', staff: 'Staff Management', attendance: 'Daily Attendance', reports: 'Monthly Reports', settings: 'Settings' };
+  document.getElementById('adminPageTitle').textContent = titles[viewName] || 'Dashboard';
+  closeSidebar();
+
+  // 刷新对应视图数据
+  if (viewName === 'dashboard') renderDashboard();
+  else if (viewName === 'staff') renderStaffTable();
+  else if (viewName === 'attendance') { document.getElementById('attDateFilter').value = todayStr(); renderAttendanceTable(); }
+  else if (viewName === 'reports') { initReportSelectors(); renderReport(); }
+  else if (viewName === 'settings') loadSettings();
+}
+
+/* ============================================================
+   侧边栏（移动端）
+   ============================================================ */
+function openSidebar() {
+  document.getElementById('adminSidebar').classList.add('open');
+  document.getElementById('sidebarOverlay').classList.add('open');
+}
+function closeSidebar() {
+  document.getElementById('adminSidebar').classList.remove('open');
+  document.getElementById('sidebarOverlay').classList.remove('open');
+}
+
+/* ============================================================
+   员工仪表板
+   ============================================================ */
+function initStaffDashboard() {
+  const settings = getSettings();
+  document.getElementById('staffCompanyName').textContent = settings.companyName;
+  document.getElementById('staffName').textContent = currentUser.name;
+  
+  // Set simulated network dropdown label based on current SSID setting
+  const simSelect = document.getElementById('simulatedNetwork');
+  if (simSelect && simSelect.options.length > 0) {
+    simSelect.options[0].text = `${settings.officeSSID} (Authorized Wi-Fi)`;
+  }
+
+  updateStaffClock();
+  clockInterval = setInterval(updateStaffClock, 1000);
+  checkNetwork();
+  updateTodayStatus();
+  renderRecentAttendance();
+}
+
+function updateStaffClock() {
+  const now = new Date();
+  document.getElementById('staffDate').textContent = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  document.getElementById('staffTime').textContent = now.toLocaleTimeString('en-US', { hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  // 更新管理员日期时间
+  const adminDT = document.getElementById('adminDateTime');
+  if (adminDT) adminDT.textContent = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' + now.toLocaleTimeString('en-US', { hour12: true, hour: '2-digit', minute: '2-digit' });
+}
+
+function updateTodayStatus() {
+  const today = todayStr();
+  const records = getAttendance().filter(r => r.staffId === currentUser.id && r.date === today);
+
+  if (records.length > 0 && records[0].checkIn) {
+    const rec = records[0];
+    document.getElementById('todayCheckIn').textContent = formatTime(rec.checkIn);
+    document.getElementById('todayCheckOut').textContent = rec.checkOut ? formatTime(rec.checkOut) : '--:--';
+
+    const btn = document.getElementById('checkinBtn');
+    const icon = document.getElementById('checkinIcon');
+    const text = document.getElementById('checkinText');
+
+    if (rec.checkOut) {
+      // 已签退
+      document.getElementById('todayStatusBadge').innerHTML = `<span class="badge ${rec.status === 'Late' ? 'badge-late' : rec.status === 'Early Departure' ? 'badge-early' : 'badge-present'}">${rec.status}</span>`;
+      btn.disabled = true;
+      icon.className = 'fas fa-circle-check text-3xl mb-2';
+      text.textContent = 'Completed';
+      btn.classList.add('checked-in');
+    } else {
+      // 已签到待签退
+      document.getElementById('todayStatusBadge').innerHTML = '<span class="badge badge-checked-in">Checked In</span>';
+      btn.disabled = !networkVerified;
+      icon.className = 'fas fa-right-from-bracket text-3xl mb-2';
+      text.textContent = 'Check Out';
+      btn.classList.add('checked-in');
+      btn.style.background = '#D97706';
+    }
+  } else {
+    document.getElementById('todayCheckIn').textContent = '--:--';
+    document.getElementById('todayCheckOut').textContent = '--:--';
+    document.getElementById('todayStatusBadge').innerHTML = '<span class="badge badge-absent">Not Checked In</span>';
+  }
+}
+
+async function handleCheckIn() {
+  const result = await verifyNetwork();
+  if (!result.verified) {
+    showToast(result.message, 'error');
+    return;
+  }
+
+  const today = todayStr();
+  const now = nowTimeStr();
+  const records = getAttendance();
+  const existing = records.find(r => r.staffId === currentUser.id && r.date === today);
+
+  if (existing) {
+    if (existing.checkOut) {
+      showToast('You have already completed attendance for today.', 'warning');
+      return;
+    }
+    // 签退
+    existing.checkOut = now;
+    const settings = getSettings();
+    const [endH, endM] = settings.workEnd.split(':').map(Number);
+    const [outH, outM] = now.split(':').map(Number);
+    const endMinutes = endH * 60 + endM;
+    const outMinutes = outH * 60 + outM;
+    if (outMinutes < endMinutes - settings.earlyThreshold) {
+      existing.status = 'Early Departure';
+    } else if (existing.status !== 'Late') {
+      existing.status = 'Present';
+    }
+    existing.ipAddress = result.ip;
+    existing.deviceInfo = getDeviceInfo();
+    existing.ssid = result.ssid;
+    existing.bssid = result.bssid;
+    existing.verificationMethod = result.method;
+    existing.networkVerificationStatus = result.verified ? 'Verified' : 'Failed';
+    saveAttendanceData(records);
+    showToast('Check-out recorded successfully!', 'success');
+  } else {
+    // 签到
+    const settings = getSettings();
+    const [startH, startM] = settings.workStart.split(':').map(Number);
+    const [inH, inM] = now.split(':').map(Number);
+    const startMinutes = startH * 60 + startM;
+    const inMinutes = inH * 60 + inM;
+    const isLate = inMinutes > startMinutes + settings.lateThreshold;
+
+    const record = {
+      id: genId(),
+      staffId: currentUser.id,
+      staffName: currentUser.name,
+      department: currentUser.department,
+      date: today,
+      checkIn: now,
+      checkOut: null,
+      ipAddress: result.ip,
+      deviceInfo: getDeviceInfo(),
+      ssid: result.ssid,
+      bssid: result.bssid,
+      verificationMethod: result.method,
+      networkVerificationStatus: result.verified ? 'Verified' : 'Failed',
+      status: isLate ? 'Late' : 'Present'
+    };
+    records.push(record);
+    saveAttendanceData(records);
+    showToast(`Check-in recorded! ${isLate ? 'Marked as Late.' : ''}`, isLate ? 'warning' : 'success');
+  }
+
+  updateTodayStatus();
+  renderRecentAttendance();
+}
+
+function renderRecentAttendance() {
+  const records = getAttendance().filter(r => r.staffId === currentUser.id).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 7);
+  const tbody = document.getElementById('recentAttBody');
+  if (records.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="py-6 text-center text-gray-500">No attendance records yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = records.map(r => `
+    <tr class="data-row border-b border-gray-800">
+      <td class="py-2.5 text-gray-300">${formatDate(r.date)}</td>
+      <td class="py-2.5 text-brand-400">${r.checkIn ? formatTime(r.checkIn) : '--'}</td>
+      <td class="py-2.5 text-gold-400">${r.checkOut ? formatTime(r.checkOut) : '--'}</td>
+      <td class="py-2.5"><span class="badge badge-${r.status.toLowerCase().replace(' ', '')}">${r.status}</span></td>
+    </tr>
+  `).join('');
+}
+
+/* ============================================================
+   管理员仪表板
+   ============================================================ */
+function renderDashboard() {
+  const staff = getStaff().filter(s => s.role === 'staff' && s.active);
+  const today = todayStr();
+  const records = getAttendance().filter(r => r.date === today);
+  const settings = getSettings();
+
+  const presentIds = new Set();
+  const lateIds = new Set();
+  records.forEach(r => {
+    if (r.checkIn) presentIds.add(r.staffId);
+    if (r.status === 'Late') lateIds.add(r.staffId);
+  });
+
+  const totalStaff = staff.length;
+  const present = presentIds.size;
+  const absent = totalStaff - present;
+  const late = lateIds.size;
+
+  document.getElementById('statTotal').textContent = totalStaff;
+  document.getElementById('statPresent').textContent = present;
+  document.getElementById('statAbsent').textContent = absent;
+  document.getElementById('statLate').textContent = late;
+
+  // 迟到列表
+  const lateRecords = records.filter(r => r.status === 'Late');
+  const lateList = document.getElementById('lateArrivalsList');
+  if (lateRecords.length === 0) {
+    lateList.innerHTML = '<p class="text-sm text-gray-500 py-2">No late arrivals today</p>';
+  } else {
+    lateList.innerHTML = lateRecords.map(r => `
+      <div class="flex items-center justify-between py-2 px-3 bg-surface-900/50 rounded-lg">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 bg-yellow-500/15 rounded-full flex items-center justify-center text-xs font-bold text-yellow-400">${r.staffName.charAt(0)}</div>
+          <div><p class="text-sm font-medium">${r.staffName}</p><p class="text-xs text-gray-500">${r.department}</p></div>
+        </div>
+        <div class="text-right"><p class="text-sm text-yellow-400 font-semibold">${formatTime(r.checkIn)}</p><p class="text-xs text-gray-500">Scheduled: ${settings.workStart}</p></div>
+      </div>
+    `).join('');
+  }
+
+  // 周趋势图
+  renderWeeklyChart();
+  renderDeptChart(staff);
+}
+
+function renderWeeklyChart() {
+  const labels = [];
+  const presentData = [];
+  const lateData = [];
+  const absentData = [];
+  const staff = getStaff().filter(s => s.role === 'staff' && s.active);
+  const total = staff.length;
+
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().split('T')[0];
+    labels.push(d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' }));
+    const dayRecords = getAttendance().filter(r => r.date === dateStr);
+    const p = dayRecords.filter(r => r.status === 'Present').length;
+    const l = dayRecords.filter(r => r.status === 'Late').length;
+    const e = dayRecords.filter(r => r.status === 'Early Departure').length;
+    const checkedIn = new Set(dayRecords.filter(r => r.checkIn).map(r => r.staffId)).size;
+    presentData.push(p + l + e);
+    lateData.push(l);
+    absentData.push(Math.max(0, total - checkedIn));
+  }
+
+  if (weeklyChartInstance) weeklyChartInstance.destroy();
+  const ctx = document.getElementById('weeklyChart').getContext('2d');
+  weeklyChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Present', data: presentData, backgroundColor: 'rgba(16,185,129,0.7)', borderRadius: 4 },
+        { label: 'Late', data: lateData, backgroundColor: 'rgba(245,158,11,0.7)', borderRadius: 4 },
+        { label: 'Absent', data: absentData, backgroundColor: 'rgba(239,68,68,0.5)', borderRadius: 4 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { color: '#9CA3AF', boxWidth: 12, padding: 16 } } },
+      scales: {
+        x: { stacked: true, grid: { display: false }, ticks: { color: '#6B7280' } },
+        y: { stacked: true, grid: { color: 'rgba(75,85,99,0.2)' }, ticks: { color: '#6B7280' }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+function renderDeptChart(staff) {
+  const deptCounts = {};
+  staff.forEach(s => { deptCounts[s.department] = (deptCounts[s.department] || 0) + 1; });
+  const labels = Object.keys(deptCounts);
+  const data = Object.values(deptCounts);
+  const colors = ['#10B981', '#EAB308', '#3B82F6', '#8B5CF6', '#EC4899', '#F97316', '#14B8A6'];
+
+  if (deptChartInstance) deptChartInstance.destroy();
+  const ctx = document.getElementById('deptChart').getContext('2d');
+  deptChartInstance = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{ data, backgroundColor: colors.slice(0, labels.length), borderWidth: 0 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { color: '#9CA3AF', boxWidth: 12, padding: 12 } } },
+      cutout: '65%'
+    }
+  });
+}
+
+/* ============================================================
+   员工管理 (CRUD)
+   ============================================================ */
+function renderStaffTable() {
+  const search = (document.getElementById('staffSearch')?.value || '').toLowerCase();
+  let staff = getStaff().filter(s => s.role === 'staff');
+  if (search) staff = staff.filter(s => s.name.toLowerCase().includes(search) || s.username.toLowerCase().includes(search) || s.department.toLowerCase().includes(search));
+
+  const tbody = document.getElementById('staffTableBody');
+  if (staff.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">No staff members found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = staff.map(s => `
+    <tr class="data-row border-b border-gray-800">
+      <td class="px-4 py-3">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 bg-brand-500/15 rounded-full flex items-center justify-center text-xs font-bold text-brand-400">${s.name.charAt(0)}</div>
+          <span class="font-medium">${s.name}</span>
+        </div>
+      </td>
+      <td class="px-4 py-3 text-gray-400">${s.username}</td>
+      <td class="px-4 py-3 text-gray-400">${s.department}</td>
+      <td class="px-4 py-3 text-gray-400 hidden sm:table-cell">${s.email || '-'}</td>
+      <td class="px-4 py-3"><span class="badge ${s.active ? 'badge-present' : 'badge-absent'}">${s.active ? 'Active' : 'Inactive'}</span></td>
+      <td class="px-4 py-3 text-center">
+        <button onclick="editStaff('${s.id}')" class="text-gray-400 hover:text-brand-400 transition-colors mx-1" title="Edit"><i class="fas fa-pen-to-square"></i></button>
+        <button onclick="confirmDeleteStaff('${s.id}')" class="text-gray-400 hover:text-red-400 transition-colors mx-1" title="Delete"><i class="fas fa-trash"></i></button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openStaffModal(id = null) {
+  document.getElementById('staffModal').classList.add('active');
+  document.getElementById('staffModalTitle').textContent = id ? 'Edit Staff' : 'Add Staff';
+  document.getElementById('sfPwdHint').textContent = id ? '(leave blank to keep current)' : '';
+  if (!id) {
+    document.getElementById('staffForm').reset();
+    document.getElementById('sfId').value = '';
+    document.getElementById('sfActive').checked = true;
+  }
+}
+
+function closeStaffModal() {
+  document.getElementById('staffModal').classList.remove('active');
+}
+
+async function editStaff(id) {
+  const staff = getStaff().find(s => s.id === id);
+  if (!staff) return;
+  openStaffModal(id);
+  document.getElementById('sfId').value = staff.id;
+  document.getElementById('sfName').value = staff.name;
+  document.getElementById('sfUsername').value = staff.username;
+  document.getElementById('sfPassword').value = '';
+  document.getElementById('sfDepartment').value = staff.department;
+  document.getElementById('sfEmail').value = staff.email || '';
+  document.getElementById('sfPhone').value = staff.phone || '';
+  document.getElementById('sfActive').checked = staff.active;
+}
+
+async function saveStaff(e) {
+  e.preventDefault();
+  const id = document.getElementById('sfId').value;
+  const name = document.getElementById('sfName').value.trim();
+  const username = document.getElementById('sfUsername').value.trim();
+  const password = document.getElementById('sfPassword').value;
+  const department = document.getElementById('sfDepartment').value.trim();
+  const email = document.getElementById('sfEmail').value.trim();
+  const phone = document.getElementById('sfPhone').value.trim();
+  const active = document.getElementById('sfActive').checked;
+
+  const staffList = getStaff();
+
+  // 检查用户名唯一性
+  const existingUser = staffList.find(s => s.username === username && s.id !== id);
+  if (existingUser) {
+    showToast('Username already exists!', 'error');
+    return;
+  }
+
+  if (id) {
+    // 编辑
+    const idx = staffList.findIndex(s => s.id === id);
+    if (idx >= 0) {
+      staffList[idx].name = name;
+      staffList[idx].username = username;
+      if (password) staffList[idx].password = await hashPassword(password);
+      staffList[idx].department = department;
+      staffList[idx].email = email;
+      staffList[idx].phone = phone;
+      staffList[idx].active = active;
+    }
+    showToast('Staff updated successfully!', 'success');
+  } else {
+    // 新增
+    if (!password) { showToast('Password is required for new staff.', 'error'); return; }
+    const newStaff = {
+      id: genId(), name, username, password: await hashPassword(password),
+      department, email, phone, role: 'staff', active
+    };
+    staffList.push(newStaff);
+    showToast('Staff added successfully!', 'success');
+  }
+
+  saveStaffData(staffList);
+  closeStaffModal();
+  renderStaffTable();
+}
+
+function confirmDeleteStaff(id) {
+  const staff = getStaff().find(s => s.id === id);
+  if (!staff) return;
+  document.getElementById('confirmTitle').textContent = 'Delete Staff Member';
+  document.getElementById('confirmMessage').textContent = `Are you sure you want to delete "${staff.name}"? This action cannot be undone.`;
+  document.getElementById('confirmAction').onclick = () => deleteStaff(id);
+  document.getElementById('confirmModal').classList.add('active');
+}
+
+function deleteStaff(id) {
+  let staffList = getStaff().filter(s => s.id !== id);
+  saveStaffData(staffList);
+  closeConfirmModal();
+  renderStaffTable();
+  showToast('Staff deleted.', 'success');
+}
+
+function closeConfirmModal() {
+  document.getElementById('confirmModal').classList.remove('active');
+}
+
+/* ============================================================
+   每日考勤视图
+   ============================================================ */
+function renderAttendanceTable() {
+  const date = document.getElementById('attDateFilter').value || todayStr();
+  const search = (document.getElementById('attSearchFilter')?.value || '').toLowerCase();
+  const statusFilter = document.getElementById('attStatusFilter')?.value || '';
+
+  let records = getAttendance().filter(r => r.date === date);
+
+  // 对于今天，还需要为未打卡的员工添加缺勤记录
+  const staff = getStaff().filter(s => s.role === 'staff' && s.active);
+  const checkedIds = new Set(records.map(r => r.staffId));
+
+  if (date <= todayStr()) {
+    staff.forEach(s => {
+      if (!checkedIds.has(s.id)) {
+        records.push({
+          id: 'absent_' + s.id, staffId: s.id, staffName: s.name, department: s.department,
+          date, checkIn: null, checkOut: null, status: 'Absent',
+          ipAddress: '-', deviceInfo: '-', ssid: '-', bssid: '-', networkVerificationStatus: '-'
+        });
+      }
+    });
+  }
+
+  if (search) records = records.filter(r => r.staffName.toLowerCase().includes(search));
+  if (statusFilter) records = records.filter(r => r.status === statusFilter);
+
+  records.sort((a, b) => a.staffName.localeCompare(b.staffName));
+
+  const tbody = document.getElementById('attTableBody');
+  if (records.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">No records found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = records.map(r => {
+    const statusClass = r.status === 'Present' ? 'badge-present' : r.status === 'Late' ? 'badge-late' : r.status === 'Absent' ? 'badge-absent' : 'badge-early';
+    return `
+    <tr class="data-row border-b border-gray-800">
+      <td class="px-4 py-3">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 bg-brand-500/15 rounded-full flex items-center justify-center text-xs font-bold text-brand-400">${r.staffName.charAt(0)}</div>
+          <div><p class="font-medium text-sm">${r.staffName}</p><p class="text-xs text-gray-500">${r.department || ''}</p></div>
+        </div>
+      </td>
+      <td class="px-4 py-3 text-sm ${r.checkIn ? 'text-brand-400' : 'text-gray-500'}">${r.checkIn ? formatTime(r.checkIn) : '--:--'}</td>
+      <td class="px-4 py-3 text-sm ${r.checkOut ? 'text-gold-400' : 'text-gray-500'}">${r.checkOut ? formatTime(r.checkOut) : '--:--'}</td>
+      <td class="px-4 py-3"><span class="badge ${statusClass}">${r.status}</span></td>
+      <td class="px-4 py-3 text-xs text-gray-500 hidden md:table-cell">${r.ipAddress || '-'}</td>
+      <td class="px-4 py-3 text-xs text-gray-500 hidden lg:table-cell truncate max-w-[150px]">${r.deviceInfo || '-'}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ============================================================
+   月度报告
+   ============================================================ */
+function initReportSelectors() {
+  const monthSel = document.getElementById('reportMonth');
+  const yearSel = document.getElementById('reportYear');
+  if (monthSel.options.length > 0) return;
+
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const now = new Date();
+  months.forEach((m, i) => {
+    const opt = document.createElement('option');
+    opt.value = i; opt.textContent = m;
+    if (i === now.getMonth()) opt.selected = true;
+    monthSel.appendChild(opt);
+  });
+
+  for (let y = now.getFullYear() - 2; y <= now.getFullYear() + 1; y++) {
+    const opt = document.createElement('option');
+    opt.value = y; opt.textContent = y;
+    if (y === now.getFullYear()) opt.selected = true;
+    yearSel.appendChild(opt);
+  }
+}
+
+function renderReport() {
+  const month = parseInt(document.getElementById('reportMonth').value);
+  const year = parseInt(document.getElementById('reportYear').value);
+  const search = (document.getElementById('reportSearch')?.value || '').toLowerCase();
+
+  const staff = getStaff().filter(s => s.role === 'staff' && s.active);
+  const allRecords = getAttendance();
+
+  // 计算工作日（排除周末）
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  let workingDays = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const day = new Date(year, month, d).getDay();
+    if (day !== 0 && day !== 6) workingDays++;
+  }
+  // 如果是当前月份，只计算到今天
+  const now = new Date();
+  const isCurrentMonth = month === now.getMonth() && year === now.getFullYear();
+  const effectiveDays = isCurrentMonth ? Math.min(now.getDate(), daysInMonth) : daysInMonth;
+
+  let filteredStaff = staff;
+  if (search) filteredStaff = staff.filter(s => s.name.toLowerCase().includes(search) || s.department.toLowerCase().includes(search));
+
+  let totalPresent = 0, totalAbsent = 0, totalLate = 0, totalEarly = 0;
+
+  const tbody = document.getElementById('reportTableBody');
+  tbody.innerHTML = filteredStaff.map(s => {
+    const empRecords = allRecords.filter(r => {
+      if (r.staffId !== s.id) return false;
+      const rd = new Date(r.date + 'T00:00:00');
+      return rd.getMonth() === month && rd.getFullYear() === year;
+    });
+
+    let present = 0, late = 0, absent = 0, early = 0;
+    for (let d = 1; d <= effectiveDays; d++) {
+      const day = new Date(year, month, d).getDay();
+      if (day === 0 || day === 6) continue;
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      if (dateStr > todayStr()) break;
+      const rec = empRecords.find(r => r.date === dateStr);
+      if (!rec || !rec.checkIn) absent++;
+      else if (rec.status === 'Late') late++;
+      else if (rec.status === 'Early Departure') early++;
+      else present++;
+    }
+
+    totalPresent += present; totalAbsent += absent; totalLate += late; totalEarly += early;
+    const totalDays = present + late + absent + early;
+    const rate = totalDays > 0 ? Math.round(((present + late) / totalDays) * 100) : 0;
+
+    return `
+    <tr class="data-row border-b border-gray-800">
+      <td class="px-3 py-3"><div class="flex items-center gap-2"><div class="w-7 h-7 bg-brand-500/15 rounded-full flex items-center justify-center text-xs font-bold text-brand-400">${s.name.charAt(0)}</div><span class="font-medium text-sm">${s.name}</span></div></td>
+      <td class="px-3 py-3 text-sm text-gray-400">${s.department}</td>
+      <td class="px-3 py-3 text-center text-sm text-brand-400 font-semibold">${present}</td>
+      <td class="px-3 py-3 text-center text-sm text-yellow-400 font-semibold">${late}</td>
+      <td class="px-3 py-3 text-center text-sm text-red-400 font-semibold">${absent}</td>
+      <td class="px-3 py-3 text-center text-sm text-orange-400 font-semibold">${early}</td>
+      <td class="px-3 py-3 text-center"><span class="badge ${rate >= 80 ? 'badge-present' : rate >= 50 ? 'badge-late' : 'badge-absent'}">${rate}%</span></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('rpWorkingDays').textContent = workingDays;
+  document.getElementById('rpPresent').textContent = totalPresent;
+  document.getElementById('rpAbsent').textContent = totalAbsent;
+  document.getElementById('rpLate').textContent = totalLate;
+  document.getElementById('rpEarly').textContent = totalEarly;
+}
+
+/* ============================================================
+   导出功能
+   ============================================================ */
+function getReportData() {
+  const month = parseInt(document.getElementById('reportMonth').value);
+  const year = parseInt(document.getElementById('reportYear').value);
+  const search = (document.getElementById('reportSearch')?.value || '').toLowerCase();
+  const staff = getStaff().filter(s => s.role === 'staff' && s.active);
+  const allRecords = getAttendance();
+  const settings = getSettings();
+  const monthName = new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+  let filteredStaff = staff;
+  if (search) filteredStaff = staff.filter(s => s.name.toLowerCase().includes(search) || s.department.toLowerCase().includes(search));
+
+  const rows = [];
+  filteredStaff.forEach(s => {
+    const empRecords = allRecords.filter(r => {
+      if (r.staffId !== s.id) return false;
+      const rd = new Date(r.date + 'T00:00:00');
+      return rd.getMonth() === month && rd.getFullYear() === year;
+    });
+
+    let present = 0, late = 0, absent = 0, early = 0;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const now = new Date();
+    const isCurrentMonth = month === now.getMonth() && year === now.getFullYear();
+    const effectiveDays = isCurrentMonth ? Math.min(now.getDate(), daysInMonth) : daysInMonth;
+
+    for (let d = 1; d <= effectiveDays; d++) {
+      const day = new Date(year, month, d).getDay();
+      if (day === 0 || day === 6) continue;
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      if (dateStr > todayStr()) break;
+      const rec = empRecords.find(r => r.date === dateStr);
+      if (!rec || !rec.checkIn) absent++;
+      else if (rec.status === 'Late') late++;
+      else if (rec.status === 'Early Departure') early++;
+      else present++;
+    }
+
+    const total = present + late + absent + early;
+    const rate = total > 0 ? Math.round(((present + late) / total) * 100) : 0;
+    rows.push({ Name: s.name, Department: s.department, Present: present, Late: late, Absent: absent, 'Early Departure': early, 'Attendance Rate': rate + '%' });
+  });
+
+  return { rows, monthName, companyName: settings.companyName };
+}
+
+function exportCSV() {
+  const { rows, monthName, companyName } = getReportData();
+  if (rows.length === 0) { showToast('No data to export.', 'warning'); return; }
+
+  const headers = Object.keys(rows[0]);
+  const csv = [
+    `${companyName} - Attendance Report: ${monthName}`,
+    '',
+    headers.join(','),
+    ...rows.map(r => headers.map(h => `"${r[h]}"`).join(','))
+  ].join('\n');
+
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `Attendance_Report_${monthName.replace(' ', '_')}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('CSV exported successfully!', 'success');
+}
+
+function exportPDF() {
+  const { rows, monthName, companyName } = getReportData();
+  if (rows.length === 0) { showToast('No data to export.', 'warning'); return; }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  doc.setFontSize(18);
+  doc.setTextColor(16, 185, 129);
+  doc.text(companyName, 14, 22);
+  doc.setFontSize(12);
+  doc.setTextColor(100);
+  doc.text(`Attendance Report: ${monthName}`, 14, 30);
+
+  const headers = [['Name', 'Department', 'Present', 'Late', 'Absent', 'Early Dep.', 'Rate']];
+  const data = rows.map(r => [r.Name, r.Department, r.Present, r.Late, r.Absent, r['Early Departure'], r['Attendance Rate']]);
+
+  doc.autoTable({
+    head: headers, body: data, startY: 38,
+    theme: 'grid',
+    headStyles: { fillColor: [16, 185, 129], textColor: 255, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [245, 247, 250] },
+    styles: { fontSize: 9, cellPadding: 3 }
+  });
+
+  doc.save(`Attendance_Report_${monthName.replace(' ', '_')}.pdf`);
+  showToast('PDF exported successfully!', 'success');
+}
+
+/* ============================================================
+   系统设置
+   ============================================================ */
+function loadSettings() {
+  const s = getSettings();
+  document.getElementById('setCompanyName').value = s.companyName;
+  document.getElementById('setVerifyMode').value = s.verificationMode;
+  document.getElementById('setSSID').value = s.officeSSID;
+  document.getElementById('setBSSID').value = s.officeBSSID;
+  document.getElementById('setPublicIP').value = s.officePublicIP;
+  document.getElementById('setWorkStart').value = s.workStart;
+  document.getElementById('setWorkEnd').value = s.workEnd;
+  document.getElementById('setLateThreshold').value = s.lateThreshold;
+  document.getElementById('setEarlyThreshold').value = s.earlyThreshold;
+
+  const demoToggle = document.getElementById('demoToggle');
+  demoToggle.classList.toggle('active', s.demoMode);
+}
+
+function saveSettings() {
+  const settings = {
+    companyName: document.getElementById('setCompanyName').value.trim() || 'Attendance',
+    verificationMode: document.getElementById('setVerifyMode').value,
+    officeSSID: document.getElementById('setSSID').value.trim(),
+    officeBSSID: document.getElementById('setBSSID').value.trim(),
+    officePublicIP: document.getElementById('setPublicIP').value.trim(),
+    workStart: document.getElementById('setWorkStart').value || '09:00',
+    workEnd: document.getElementById('setWorkEnd').value || '18:00',
+    lateThreshold: parseInt(document.getElementById('setLateThreshold').value) || 15,
+    earlyThreshold: parseInt(document.getElementById('setEarlyThreshold').value) || 15,
+    demoMode: document.getElementById('demoToggle').classList.contains('active')
+  };
+
+  saveSettingsData(settings);
+  updateCompanyNames();
+  showToast('Settings saved successfully!', 'success');
+}
+
+function toggleDemoMode() {
+  const toggle = document.getElementById('demoToggle');
+  toggle.classList.toggle('active');
+}
+
+function updateCompanyNames() {
+  const settings = getSettings();
+  ['loginCompanyName', 'loginCompanyNameMobile', 'staffCompanyName', 'adminCompanyName'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = settings.companyName;
+  });
+  document.title = settings.companyName + ' - Staff Management System';
+}
+
+/* ============================================================
+   数据初始化/种子数据
+   ============================================================ */
+async function seedInitialData() {
+  if (localStorage.getItem(STORAGE.STAFF)) return;
+
+  const defaultPwd = await hashPassword('pass123');
+  const adminPwd = await hashPassword('admin123');
+
+  const staff = [
+    { id: 'admin_001', name: 'System Admin', username: 'admin', password: adminPwd, email: 'admin@company.com', phone: '', department: 'Administration', role: 'admin', active: true },
+    { id: 'S001', name: 'John Smith', username: 'john', password: defaultPwd, email: 'john@company.com', phone: '555-0101', department: 'IT', role: 'staff', active: true },
+    { id: 'S002', name: 'Sarah Johnson', username: 'sarah', password: defaultPwd, email: 'sarah@company.com', phone: '555-0102', department: 'HR', role: 'staff', active: true },
+    { id: 'S003', name: 'Michael Brown', username: 'michael', password: defaultPwd, email: 'michael@company.com', phone: '555-0103', department: 'Finance', role: 'staff', active: true },
+    { id: 'S004', name: 'Emily Davis', username: 'emily', password: defaultPwd, email: 'emily@company.com', phone: '555-0104', department: 'Marketing', role: 'staff', active: true },
+    { id: 'S005', name: 'David Wilson', username: 'david', password: defaultPwd, email: 'david@company.com', phone: '555-0105', department: 'Operations', role: 'staff', active: true },
+    { id: 'S006', name: 'Lisa Anderson', username: 'lisa', password: defaultPwd, email: 'lisa@company.com', phone: '555-0106', department: 'IT', role: 'staff', active: true },
+    { id: 'S007', name: 'Robert Taylor', username: 'robert', password: defaultPwd, email: 'robert@company.com', phone: '555-0107', department: 'Finance', role: 'staff', active: true }
+  ];
+
+  // 生成过去 7 天的考勤记录
+  const attendance = [];
+  const now = new Date();
+  const ip = '192.168.1.';
+
+  for (let d = 7; d >= 1; d--) {
+    const date = new Date(now);
+    date.setDate(date.getDate() - d);
+    if (date.getDay() === 0 || date.getDay() === 6) continue;
+    const dateStr = date.toISOString().split('T')[0];
+
+    staff.filter(s => s.role === 'staff').forEach((s, idx) => {
+      const rand = Math.random();
+      let checkIn, checkOut, status;
+
+      if (rand < 0.65) {
+        // 准时
+        const h = 8 + Math.floor(Math.random() * 1);
+        const m = Math.floor(Math.random() * 45);
+        checkIn = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
+        const outH = 17 + Math.floor(Math.random() * 2);
+        const outM = Math.floor(Math.random() * 60);
+        checkOut = `${String(outH).padStart(2, '0')}:${String(outM).padStart(2, '0')}:00`;
+        status = 'Present';
+      } else if (rand < 0.85) {
+        // 迟到
+        const h = 9 + Math.floor(Math.random() * 2);
+        const m = 15 + Math.floor(Math.random() * 45);
+        checkIn = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
+        const outH = 17 + Math.floor(Math.random() * 2);
+        const outM = Math.floor(Math.random() * 60);
+        checkOut = `${String(outH).padStart(2, '0')}:${String(outM).padStart(2, '0')}:00`;
+        status = 'Late';
+      } else if (rand < 0.95) {
+        // 早退
+        checkIn = `${String(8 + Math.floor(Math.random())).padStart(2, '0')}:${String(Math.floor(Math.random() * 30)).padStart(2, '0')}:00`;
+        checkOut = `${String(16 + Math.floor(Math.random())).padStart(2, '0')}:${String(Math.floor(Math.random() * 30)).padStart(2, '0')}:00`;
+        status = 'Early Departure';
+      } else {
+        // 缺勤
+        checkIn = null; checkOut = null; status = 'Absent';
+      }
+
+      attendance.push({
+        id: genId() + d + idx,
+        staffId: s.id, staffName: s.name, department: s.department,
+        date: dateStr, checkIn, checkOut,
+        ipAddress: ip + (idx + 10), deviceInfo: 'Chrome, Windows',
+        ssid: 'Go Getters 5G', bssid: '00:1A:2B:3C:4D:5E',
+        verificationMethod: 'demo', status,
+        networkVerificationStatus: status === 'Absent' ? '-' : 'Verified'
+      });
+    });
+  }
+
+  saveStaffData(staff);
+  saveAttendanceData(attendance);
+  saveSettingsData(DEFAULT_SETTINGS);
+}
+
+/* ============================================================
+   应用初始化
+   ============================================================ */
+async function init() {
+  await seedInitialData();
+  updateCompanyNames();
+
+  // 检查现有会话
+  const session = JSON.parse(localStorage.getItem(STORAGE.SESSION) || 'null');
+  if (session) {
+    const staff = getStaff().find(s => s.id === session.id);
+    if (staff) {
+      currentUser = staff;
+      if (session.role === 'admin') {
+        showPage('adminPage');
+        showAdminView('dashboard');
+      } else {
+        showPage('staffPage');
+        initStaffDashboard();
+      }
+      return;
+    }
+  }
+
+  showPage('loginPage');
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
