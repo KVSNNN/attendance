@@ -11,6 +11,11 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  const supabaseUrl = 'https://nqndedhkzazxfqnmyvms.supabase.co';
+  const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5xbmRlZGhremF6eGZxbm15dm1zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNjM1MTcsImV4cCI6MjA5NjkzOTUxN30.Bd1esOg4hbElYuIGsg-oKwwcr616t0ExaxIIetQEOBA';
+  const supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+</script>
 <script src="supabase.js"></script>
 <script>
 tailwind.config = {
@@ -697,7 +702,27 @@ function genId() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 }
 
-// Data access layer moved to supabase.js
+/* ============================================================
+   数据访问层 (localStorage)
+   ============================================================ */
+function getStaff() {
+  return JSON.parse(localStorage.getItem(STORAGE.STAFF) || '[]');
+}
+function saveStaffData(data) {
+  localStorage.setItem(STORAGE.STAFF, JSON.stringify(data));
+}
+function getAttendance() {
+  return JSON.parse(localStorage.getItem(STORAGE.ATTENDANCE) || '[]');
+}
+function saveAttendanceData(data) {
+  localStorage.setItem(STORAGE.ATTENDANCE, JSON.stringify(data));
+}
+function getSettings() {
+  return JSON.parse(localStorage.getItem(STORAGE.SETTINGS) || 'null') || { ...DEFAULT_SETTINGS };
+}
+function saveSettingsData(data) {
+  localStorage.setItem(STORAGE.SETTINGS, JSON.stringify(data));
+}
 
 /* ============================================================
    Toast 通知
@@ -744,7 +769,7 @@ async function detectNetwork() {
 }
 
 async function verifyNetwork() {
-  const settings = await getSettings();
+  const settings = getSettings();
   const netInfo = await detectNetwork();
 
   if (settings.demoMode) {
@@ -832,7 +857,7 @@ async function handleLogin(e) {
     currentUser = admin;
     localStorage.setItem(STORAGE.SESSION, JSON.stringify({ id: admin.id, role: 'admin' }));
     showPage('adminPage');
-    await showAdminView('dashboard');
+    showAdminView('dashboard');
   } else {
     // 员工认证
     const emp = staff.find(s => s.role === 'staff' && s.username === username && s.password === hashedPwd && s.active);
@@ -844,7 +869,7 @@ async function handleLogin(e) {
     currentUser = emp;
     localStorage.setItem(STORAGE.SESSION, JSON.stringify({ id: emp.id, role: 'staff' }));
     showPage('staffPage');
-    await initStaffDashboard();
+    initStaffDashboard();
   }
 }
 
@@ -891,7 +916,7 @@ function showPage(pageId) {
   document.getElementById(pageId).classList.add('active');
 }
 
-async function showAdminView(viewName) {
+function showAdminView(viewName) {
   document.querySelectorAll('.admin-view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + viewName).classList.add('active');
   document.querySelectorAll('.sidebar-link').forEach(l => {
@@ -902,11 +927,11 @@ async function showAdminView(viewName) {
   closeSidebar();
 
   // 刷新对应视图数据
-  if (viewName === 'dashboard') await renderDashboard();
-  else if (viewName === 'staff') await renderStaffTable();
-  else if (viewName === 'attendance') { document.getElementById('attDateFilter').value = todayStr(); await renderAttendanceTable(); }
-  else if (viewName === 'reports') { initReportSelectors(); await renderReport(); }
-  else if (viewName === 'settings') await loadSettings();
+  if (viewName === 'dashboard') renderDashboard();
+  else if (viewName === 'staff') renderStaffTable();
+  else if (viewName === 'attendance') { document.getElementById('attDateFilter').value = todayStr(); renderAttendanceTable(); }
+  else if (viewName === 'reports') { initReportSelectors(); renderReport(); }
+  else if (viewName === 'settings') loadSettings();
 }
 
 /* ============================================================
@@ -924,8 +949,8 @@ function closeSidebar() {
 /* ============================================================
    员工仪表板
    ============================================================ */
-async function initStaffDashboard() {
-  const settings = await getSettings();
+function initStaffDashboard() {
+  const settings = getSettings();
   document.getElementById('staffCompanyName').textContent = settings.companyName;
   document.getElementById('staffName').textContent = currentUser.name;
   
@@ -934,8 +959,8 @@ async function initStaffDashboard() {
   updateStaffClock();
   clockInterval = setInterval(updateStaffClock, 1000);
   checkNetwork();
-  await updateTodayStatus();
-  await renderRecentAttendance();
+  updateTodayStatus();
+  renderRecentAttendance();
 }
 
 function updateStaffClock() {
@@ -947,10 +972,9 @@ function updateStaffClock() {
   if (adminDT) adminDT.textContent = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' + now.toLocaleTimeString('en-US', { hour12: true, hour: '2-digit', minute: '2-digit' });
 }
 
-async function updateTodayStatus() {
+function updateTodayStatus() {
   const today = todayStr();
-  const allRecords = await getAttendance();
-  const records = allRecords.filter(r => r.staffId === currentUser.id && r.date === today);
+  const records = getAttendance().filter(r => r.staffId === currentUser.id && r.date === today);
 
   if (records.length > 0 && records[0].checkIn) {
     const rec = records[0];
@@ -993,7 +1017,7 @@ async function handleCheckIn() {
 
   const today = todayStr();
   const now = nowTimeStr();
-  const records = await getAttendance();
+  const records = getAttendance();
   const existing = records.find(r => r.staffId === currentUser.id && r.date === today);
 
   if (existing) {
@@ -1003,7 +1027,7 @@ async function handleCheckIn() {
     }
     // 签退
     existing.checkOut = now;
-    const settings = await getSettings();
+    const settings = getSettings();
     const [endH, endM] = settings.workEnd.split(':').map(Number);
     const [outH, outM] = now.split(':').map(Number);
     const endMinutes = endH * 60 + endM;
@@ -1019,11 +1043,11 @@ async function handleCheckIn() {
     existing.bssid = result.bssid;
     existing.verificationMethod = result.method;
     existing.networkVerificationStatus = result.verified ? 'Verified' : 'Failed';
-    await saveAttendanceData(records);
+    saveAttendanceData(records);
     showToast('Check-out recorded successfully!', 'success');
   } else {
     // 签到
-    const settings = await getSettings();
+    const settings = getSettings();
     const [startH, startM] = settings.workStart.split(':').map(Number);
     const [inH, inM] = now.split(':').map(Number);
     const startMinutes = startH * 60 + startM;
@@ -1047,17 +1071,16 @@ async function handleCheckIn() {
       status: isLate ? 'Late' : 'Present'
     };
     records.push(record);
-    await saveAttendanceData(records);
+    saveAttendanceData(records);
     showToast(`Check-in recorded! ${isLate ? 'Marked as Late.' : ''}`, isLate ? 'warning' : 'success');
   }
 
-  await updateTodayStatus();
-  await renderRecentAttendance();
+  updateTodayStatus();
+  renderRecentAttendance();
 }
 
-async function renderRecentAttendance() {
-  const allRecords = await getAttendance();
-  const records = allRecords.filter(r => r.staffId === currentUser.id).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 7);
+function renderRecentAttendance() {
+  const records = getAttendance().filter(r => r.staffId === currentUser.id).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 7);
   const tbody = document.getElementById('recentAttBody');
   if (records.length === 0) {
     tbody.innerHTML = '<tr><td colspan="4" class="py-6 text-center text-gray-500">No attendance records yet</td></tr>';
@@ -1076,14 +1099,12 @@ async function renderRecentAttendance() {
 /* ============================================================
    管理员仪表板
    ============================================================ */
-async function renderDashboard() {
-  const staffList = await getStaff();
-  const staff = staffList.filter(s => s.role === 'staff' && s.active);
+function renderDashboard() {
+  const staff = getStaff().filter(s => s.role === 'staff' && s.active);
   const activeStaffIds = new Set(staff.map(s => s.id));
   const today = todayStr();
-  const allRecords = await getAttendance();
-  const records = allRecords.filter(r => r.date === today && activeStaffIds.has(r.staffId));
-  const settings = await getSettings();
+  const records = getAttendance().filter(r => r.date === today && activeStaffIds.has(r.staffId));
+  const settings = getSettings();
 
   const presentIds = new Set();
   const lateIds = new Set();
@@ -1120,26 +1141,24 @@ async function renderDashboard() {
   }
 
   // 周趋势图
-  await renderWeeklyChart();
+  renderWeeklyChart();
   renderDeptChart(staff);
 }
 
-async function renderWeeklyChart() {
+function renderWeeklyChart() {
   const labels = [];
   const presentData = [];
   const lateData = [];
   const absentData = [];
-  const staffList = await getStaff();
-  const staff = staffList.filter(s => s.role === 'staff' && s.active);
+  const staff = getStaff().filter(s => s.role === 'staff' && s.active);
   const activeStaffIds = new Set(staff.map(s => s.id));
   const total = staff.length;
-  const allRecords = await getAttendance();
 
   for (let i = 6; i >= 0; i--) {
     const d = new Date(); d.setDate(d.getDate() - i);
     const dateStr = d.toISOString().split('T')[0];
     labels.push(d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' }));
-    const dayRecords = allRecords.filter(r => r.date === dateStr && activeStaffIds.has(r.staffId));
+    const dayRecords = getAttendance().filter(r => r.date === dateStr && activeStaffIds.has(r.staffId));
     const p = dayRecords.filter(r => r.status === 'Present').length;
     const l = dayRecords.filter(r => r.status === 'Late').length;
     const e = dayRecords.filter(r => r.status === 'Early Departure').length;
@@ -1198,10 +1217,9 @@ function renderDeptChart(staff) {
 /* ============================================================
    员工管理 (CRUD)
    ============================================================ */
-async function renderStaffTable() {
+function renderStaffTable() {
   const search = (document.getElementById('staffSearch')?.value || '').toLowerCase();
-  const staffList = await getStaff();
-  let staff = staffList.filter(s => s.role === 'staff');
+  let staff = getStaff().filter(s => s.role === 'staff');
   if (search) staff = staff.filter(s => s.name.toLowerCase().includes(search) || s.username.toLowerCase().includes(search) || s.department.toLowerCase().includes(search));
 
   const tbody = document.getElementById('staffTableBody');
@@ -1245,8 +1263,7 @@ function closeStaffModal() {
 }
 
 async function editStaff(id) {
-  const staffList = await getStaff();
-  const staff = staffList.find(s => s.id === id);
+  const staff = getStaff().find(s => s.id === id);
   if (!staff) return;
   openStaffModal(id);
   document.getElementById('sfId').value = staff.id;
@@ -1270,7 +1287,7 @@ async function saveStaff(e) {
   const phone = document.getElementById('sfPhone').value.trim();
   const active = document.getElementById('sfActive').checked;
 
-  const staffList = await getStaff();
+  const staffList = getStaff();
 
   // 检查用户名唯一性
   const existingUser = staffList.find(s => s.username === username && s.id !== id);
@@ -1303,14 +1320,13 @@ async function saveStaff(e) {
     showToast('Staff added successfully!', 'success');
   }
 
-  await saveStaffData(staffList);
+  saveStaffData(staffList);
   closeStaffModal();
-  await renderStaffTable();
+  renderStaffTable();
 }
 
-async function confirmDeleteStaff(id) {
-  const staffList = await getStaff();
-  const staff = staffList.find(s => s.id === id);
+function confirmDeleteStaff(id) {
+  const staff = getStaff().find(s => s.id === id);
   if (!staff) return;
   document.getElementById('confirmTitle').textContent = 'Delete Staff Member';
   document.getElementById('confirmMessage').textContent = `Are you sure you want to delete "${staff.name}"? This action cannot be undone.`;
@@ -1318,10 +1334,11 @@ async function confirmDeleteStaff(id) {
   document.getElementById('confirmModal').classList.add('active');
 }
 
-async function deleteStaff(id) {
-  await deleteStaffRecord(id);
+function deleteStaff(id) {
+  let staffList = getStaff().filter(s => s.id !== id);
+  saveStaffData(staffList);
   closeConfirmModal();
-  await renderStaffTable();
+  renderStaffTable();
   showToast('Staff deleted.', 'success');
 }
 
@@ -1332,17 +1349,15 @@ function closeConfirmModal() {
 /* ============================================================
    每日考勤视图
    ============================================================ */
-async function renderAttendanceTable() {
+function renderAttendanceTable() {
   const date = document.getElementById('attDateFilter').value || todayStr();
   const search = (document.getElementById('attSearchFilter')?.value || '').toLowerCase();
   const statusFilter = document.getElementById('attStatusFilter')?.value || '';
 
-  const staffList = await getStaff();
-  const staff = staffList.filter(s => s.role === 'staff' && s.active);
+  const staff = getStaff().filter(s => s.role === 'staff' && s.active);
   const activeStaffIds = new Set(staff.map(s => s.id));
   
-  const allRecords = await getAttendance();
-  let records = allRecords.filter(r => r.date === date && activeStaffIds.has(r.staffId));
+  let records = getAttendance().filter(r => r.date === date && activeStaffIds.has(r.staffId));
 
   // 对于今天，还需要为未打卡的员工添加缺勤记录
   const checkedIds = new Set(records.map(r => r.staffId));
@@ -1413,14 +1428,13 @@ function initReportSelectors() {
   }
 }
 
-async function renderReport() {
+function renderReport() {
   const month = parseInt(document.getElementById('reportMonth').value);
   const year = parseInt(document.getElementById('reportYear').value);
   const search = (document.getElementById('reportSearch')?.value || '').toLowerCase();
 
-  const staffList = await getStaff();
-  const staff = staffList.filter(s => s.role === 'staff' && s.active);
-  const allRecords = await getAttendance();
+  const staff = getStaff().filter(s => s.role === 'staff' && s.active);
+  const allRecords = getAttendance();
 
   // 计算工作日（排除周末）
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -1486,14 +1500,13 @@ async function renderReport() {
 /* ============================================================
    导出功能
    ============================================================ */
-async function getReportData() {
+function getReportData() {
   const month = parseInt(document.getElementById('reportMonth').value);
   const year = parseInt(document.getElementById('reportYear').value);
   const search = (document.getElementById('reportSearch')?.value || '').toLowerCase();
-  const staffList = await getStaff();
-  const staff = staffList.filter(s => s.role === 'staff' && s.active);
-  const allRecords = await getAttendance();
-  const settings = await getSettings();
+  const staff = getStaff().filter(s => s.role === 'staff' && s.active);
+  const allRecords = getAttendance();
+  const settings = getSettings();
   const monthName = new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
   let filteredStaff = staff;
@@ -1533,8 +1546,8 @@ async function getReportData() {
   return { rows, monthName, companyName: settings.companyName };
 }
 
-async function exportCSV() {
-  const { rows, monthName, companyName } = await getReportData();
+function exportCSV() {
+  const { rows, monthName, companyName } = getReportData();
   if (rows.length === 0) { showToast('No data to export.', 'warning'); return; }
 
   const headers = Object.keys(rows[0]);
@@ -1554,8 +1567,8 @@ async function exportCSV() {
   showToast('CSV exported successfully!', 'success');
 }
 
-async function exportPDF() {
-  const { rows, monthName, companyName } = await getReportData();
+function exportPDF() {
+  const { rows, monthName, companyName } = getReportData();
   if (rows.length === 0) { showToast('No data to export.', 'warning'); return; }
 
   const { jsPDF } = window.jspdf;
@@ -1586,8 +1599,8 @@ async function exportPDF() {
 /* ============================================================
    系统设置
    ============================================================ */
-async function loadSettings() {
-  const s = await getSettings();
+function loadSettings() {
+  const s = getSettings();
   document.getElementById('setCompanyName').value = s.companyName;
   document.getElementById('setVerifyMode').value = s.verificationMode;
   document.getElementById('setSSID').value = s.officeSSID;
@@ -1618,17 +1631,17 @@ async function saveSettings() {
 
   const newAdminPwd = document.getElementById('setAdminPassword')?.value;
   if (newAdminPwd) {
-    const staffList = await getStaff();
+    const staffList = getStaff();
     const adminIdx = staffList.findIndex(s => s.role === 'admin');
     if (adminIdx >= 0) {
       staffList[adminIdx].password = await hashPassword(newAdminPwd);
-      await saveStaffData(staffList);
+      saveStaffData(staffList);
       document.getElementById('setAdminPassword').value = '';
     }
   }
 
-  await saveSettingsData(settings);
-  await updateCompanyNames();
+  saveSettingsData(settings);
+  updateCompanyNames();
   showToast('Settings saved successfully!', 'success');
 }
 
@@ -1637,8 +1650,8 @@ function toggleDemoMode() {
   toggle.classList.toggle('active');
 }
 
-async function updateCompanyNames() {
-  const settings = await getSettings();
+function updateCompanyNames() {
+  const settings = getSettings();
   ['loginCompanyName', 'loginCompanyNameMobile', 'staffCompanyName', 'adminCompanyName'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.textContent = settings.companyName;
@@ -1650,8 +1663,7 @@ async function updateCompanyNames() {
    数据初始化/种子数据
    ============================================================ */
 async function seedInitialData() {
-  const existingStaff = await getStaff();
-  if (existingStaff && existingStaff.length > 0) return;
+  if (localStorage.getItem(STORAGE.STAFF)) return;
 
   const defaultPwd = await hashPassword('pass123');
   const adminPwd = await hashPassword('admin123');
@@ -1722,9 +1734,9 @@ async function seedInitialData() {
     });
   }
 
-  await saveStaffData(staff);
-  await saveAttendanceData(attendance);
-  await saveSettingsData(DEFAULT_SETTINGS);
+  saveStaffData(staff);
+  saveAttendanceData(attendance);
+  saveSettingsData(DEFAULT_SETTINGS);
 }
 
 /* ============================================================
@@ -1732,21 +1744,20 @@ async function seedInitialData() {
    ============================================================ */
 async function init() {
   await seedInitialData();
-  await updateCompanyNames();
+  updateCompanyNames();
 
   // 检查现有会话
   const session = JSON.parse(localStorage.getItem(STORAGE.SESSION) || 'null');
   if (session) {
-    const staffList = await getStaff();
-    const staff = staffList.find(s => s.id === session.id);
+    const staff = getStaff().find(s => s.id === session.id);
     if (staff) {
       currentUser = staff;
       if (session.role === 'admin') {
         showPage('adminPage');
-        await showAdminView('dashboard');
+        showAdminView('dashboard');
       } else {
         showPage('staffPage');
-        await initStaffDashboard();
+        initStaffDashboard();
       }
       return;
     }
