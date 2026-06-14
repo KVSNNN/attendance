@@ -815,7 +815,8 @@ async function loadAllData() {
     dataLoadOk = true;
   } catch (e) {
     console.error('Failed to load data from Supabase:', e);
-    showToast('Could not load data from the database. Check your connection.', 'error');
+    const detail = (e && (e.message || e.error_description || e.hint)) || String(e);
+    showToast('DB load failed: ' + detail, 'error');
     dataLoadOk = false;
   }
 }
