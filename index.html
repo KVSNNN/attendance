@@ -639,6 +639,12 @@ let weeklyChartInstance = null;
 let deptChartInstance = null;
 let networkVerified = false;
 
+// 内存缓存（数据来源于 Supabase）
+let staffCache = [];
+let attendanceCache = [];
+let settingsCache = null;
+let dataLoadOk = false;
+
 /* ============================================================
    工具函数
    ============================================================ */
@@ -703,25 +709,140 @@ function genId() {
 }
 
 /* ============================================================
-   数据访问层 (localStorage)
+   数据访问层 (Supabase, 内存缓存)
    ============================================================ */
 function getStaff() {
-  return JSON.parse(localStorage.getItem(STORAGE.STAFF) || '[]');
+  return staffCache;
 }
 function saveStaffData(data) {
-  localStorage.setItem(STORAGE.STAFF, JSON.stringify(data));
+  staffCache = data;
 }
 function getAttendance() {
-  return JSON.parse(localStorage.getItem(STORAGE.ATTENDANCE) || '[]');
+  return attendanceCache;
 }
 function saveAttendanceData(data) {
-  localStorage.setItem(STORAGE.ATTENDANCE, JSON.stringify(data));
+  attendanceCache = data;
 }
 function getSettings() {
-  return JSON.parse(localStorage.getItem(STORAGE.SETTINGS) || 'null') || { ...DEFAULT_SETTINGS };
+  return settingsCache || { ...DEFAULT_SETTINGS };
 }
 function saveSettingsData(data) {
-  localStorage.setItem(STORAGE.SETTINGS, JSON.stringify(data));
+  settingsCache = data;
+}
+
+/* ---- 字段映射: 应用(camelCase) <-> Supabase(snake_case) ---- */
+function attendanceFromDb(row) {
+  return {
+    id: row.id,
+    staffId: row.staff_id,
+    staffName: row.staff_name,
+    department: row.department,
+    date: row.date,
+    checkIn: row.check_in,
+    checkOut: row.check_out,
+    ipAddress: row.ip_address,
+    deviceInfo: row.device_info,
+    ssid: row.ssid,
+    bssid: row.bssid,
+    verificationMethod: row.verification_method,
+    networkVerificationStatus: row.network_verification_status,
+    status: row.status
+  };
+}
+function attendanceToDb(r) {
+  return {
+    id: r.id,
+    staff_id: r.staffId,
+    staff_name: r.staffName,
+    department: r.department,
+    date: r.date,
+    check_in: r.checkIn,
+    check_out: r.checkOut,
+    ip_address: r.ipAddress,
+    device_info: r.deviceInfo,
+    ssid: r.ssid,
+    bssid: r.bssid,
+    verification_method: r.verificationMethod,
+    network_verification_status: r.networkVerificationStatus,
+    status: r.status
+  };
+}
+function settingsFromDb(row) {
+  return {
+    companyName: row.company_name,
+    verificationMode: row.verification_mode,
+    officeSSID: row.office_ssid,
+    officeBSSID: row.office_bssid,
+    officePublicIP: row.office_public_ip || '',
+    workStart: (row.work_start || '09:00').slice(0, 5),
+    workEnd: (row.work_end || '18:00').slice(0, 5),
+    lateThreshold: row.late_threshold,
+    earlyThreshold: row.early_threshold,
+    demoMode: row.demo_mode
+  };
+}
+function settingsToDb(s) {
+  return {
+    id: 1,
+    company_name: s.companyName,
+    verification_mode: s.verificationMode,
+    office_ssid: s.officeSSID,
+    office_bssid: s.officeBSSID,
+    office_public_ip: s.officePublicIP,
+    work_start: s.workStart,
+    work_end: s.workEnd,
+    late_threshold: s.lateThreshold,
+    early_threshold: s.earlyThreshold,
+    demo_mode: s.demoMode
+  };
+}
+
+/* ---- Supabase 读取/写入 ---- */
+async function loadAllData() {
+  try {
+    const [staffRes, attRes, setRes] = await Promise.all([
+      supabase.from('staff').select('*'),
+      supabase.from('attendance').select('*'),
+      supabase.from('settings').select('*').eq('id', 1).maybeSingle()
+    ]);
+    if (staffRes.error) throw staffRes.error;
+    if (attRes.error) throw attRes.error;
+    if (setRes.error) throw setRes.error;
+
+    staffCache = staffRes.data || [];
+    attendanceCache = (attRes.data || []).map(attendanceFromDb);
+    settingsCache = setRes.data ? settingsFromDb(setRes.data) : null;
+    dataLoadOk = true;
+  } catch (e) {
+    console.error('Failed to load data from Supabase:', e);
+    showToast('Could not load data from the database. Check your connection.', 'error');
+    dataLoadOk = false;
+  }
+}
+
+async function upsertStaffToDb(staffMember) {
+  try {
+    const { error } = await supabase.from('staff').upsert(staffMember);
+    if (error) { console.error('Supabase staff upsert error:', error); showToast('Failed to save staff to database.', 'error'); }
+  } catch (e) { console.error('Supabase staff upsert error:', e); showToast('Failed to save staff to database.', 'error'); }
+}
+async function deleteStaffFromDb(id) {
+  try {
+    const { error } = await supabase.from('staff').delete().eq('id', id);
+    if (error) { console.error('Supabase staff delete error:', error); showToast('Failed to delete staff from database.', 'error'); }
+  } catch (e) { console.error('Supabase staff delete error:', e); showToast('Failed to delete staff from database.', 'error'); }
+}
+async function upsertAttendanceToDb(record) {
+  try {
+    const { error } = await supabase.from('attendance').upsert(attendanceToDb(record));
+    if (error) { console.error('Supabase attendance upsert error:', error); showToast('Failed to save attendance to database.', 'error'); }
+  } catch (e) { console.error('Supabase attendance upsert error:', e); showToast('Failed to save attendance to database.', 'error'); }
+}
+async function upsertSettingsToDb(settings) {
+  try {
+    const { error } = await supabase.from('settings').upsert(settingsToDb(settings));
+    if (error) { console.error('Supabase settings upsert error:', error); showToast('Failed to save settings to database.', 'error'); }
+  } catch (e) { console.error('Supabase settings upsert error:', e); showToast('Failed to save settings to database.', 'error'); }
 }
 
 /* ============================================================
@@ -1045,6 +1166,7 @@ async function handleCheckIn() {
     existing.networkVerificationStatus = result.verified ? 'Verified' : 'Failed';
     saveAttendanceData(records);
     showToast('Check-out recorded successfully!', 'success');
+    await upsertAttendanceToDb(existing);
   } else {
     // 签到
     const settings = getSettings();
@@ -1073,6 +1195,7 @@ async function handleCheckIn() {
     records.push(record);
     saveAttendanceData(records);
     showToast(`Check-in recorded! ${isLate ? 'Marked as Late.' : ''}`, isLate ? 'warning' : 'success');
+    await upsertAttendanceToDb(record);
   }
 
   updateTodayStatus();
@@ -1296,6 +1419,7 @@ async function saveStaff(e) {
     return;
   }
 
+  let staffRecord;
   if (id) {
     // 编辑
     const idx = staffList.findIndex(s => s.id === id);
@@ -1307,6 +1431,7 @@ async function saveStaff(e) {
       staffList[idx].email = email;
       staffList[idx].phone = phone;
       staffList[idx].active = active;
+      staffRecord = staffList[idx];
     }
     showToast('Staff updated successfully!', 'success');
   } else {
@@ -1317,12 +1442,14 @@ async function saveStaff(e) {
       department, email, phone, role: 'staff', active
     };
     staffList.push(newStaff);
+    staffRecord = newStaff;
     showToast('Staff added successfully!', 'success');
   }
 
   saveStaffData(staffList);
   closeStaffModal();
   renderStaffTable();
+  if (staffRecord) await upsertStaffToDb(staffRecord);
 }
 
 function confirmDeleteStaff(id) {
@@ -1334,12 +1461,14 @@ function confirmDeleteStaff(id) {
   document.getElementById('confirmModal').classList.add('active');
 }
 
-function deleteStaff(id) {
+async function deleteStaff(id) {
   let staffList = getStaff().filter(s => s.id !== id);
   saveStaffData(staffList);
+  attendanceCache = attendanceCache.filter(r => r.staffId !== id);
   closeConfirmModal();
   renderStaffTable();
   showToast('Staff deleted.', 'success');
+  await deleteStaffFromDb(id);
 }
 
 function closeConfirmModal() {
@@ -1637,12 +1766,14 @@ async function saveSettings() {
       staffList[adminIdx].password = await hashPassword(newAdminPwd);
       saveStaffData(staffList);
       document.getElementById('setAdminPassword').value = '';
+      await upsertStaffToDb(staffList[adminIdx]);
     }
   }
 
   saveSettingsData(settings);
   updateCompanyNames();
   showToast('Settings saved successfully!', 'success');
+  await upsertSettingsToDb(settings);
 }
 
 function toggleDemoMode() {
@@ -1663,7 +1794,7 @@ function updateCompanyNames() {
    数据初始化/种子数据
    ============================================================ */
 async function seedInitialData() {
-  if (localStorage.getItem(STORAGE.STAFF)) return;
+  if (!dataLoadOk || staffCache.length > 0) return;
 
   const defaultPwd = await hashPassword('pass123');
   const adminPwd = await hashPassword('admin123');
@@ -1734,15 +1865,28 @@ async function seedInitialData() {
     });
   }
 
-  saveStaffData(staff);
-  saveAttendanceData(attendance);
-  saveSettingsData(DEFAULT_SETTINGS);
+  try {
+    const { error: staffErr } = await supabase.from('staff').upsert(staff);
+    if (staffErr) throw staffErr;
+    const { error: attErr } = await supabase.from('attendance').upsert(attendance.map(attendanceToDb));
+    if (attErr) throw attErr;
+    const { error: setErr } = await supabase.from('settings').upsert(settingsToDb(DEFAULT_SETTINGS));
+    if (setErr) throw setErr;
+
+    staffCache = staff;
+    attendanceCache = attendance;
+    settingsCache = { ...DEFAULT_SETTINGS };
+  } catch (e) {
+    console.error('Failed to seed Supabase data:', e);
+    showToast('Could not initialize database with demo data.', 'error');
+  }
 }
 
 /* ============================================================
    应用初始化
    ============================================================ */
 async function init() {
+  await loadAllData();
   await seedInitialData();
   updateCompanyNames();
 
