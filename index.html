@@ -11,7 +11,18 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="supabase.js"></script>
+<script>
+  const supabaseUrl = 'https://utmewblhvqfakzqnlzyk.supabase.co';
+  const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV0bWV3YmxodnFmYWt6cW5senlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0MTkxMDUsImV4cCI6MjA5Njk5NTEwNX0.iYoyTFfkecaAhG2OtwZ0Th4b7b8FxX0HY0_HwmVoTAA';
+  let supabaseClient = null;
+  try {
+    if (window.supabase) {
+      supabaseClient = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+    }
+  } catch (e) {
+    console.error("Immediate initialization deferred:", e);
+  }
+</script>
 <script>
 tailwind.config = {
   theme: {
@@ -795,6 +806,13 @@ function settingsToDb(s) {
 /* ---- Supabase 读取/写入 ---- */
 async function loadAllData() {
   try {
+    if (typeof supabaseClient === 'undefined' || !supabaseClient) {
+      if (typeof window.supabase !== 'undefined') {
+        supabaseClient = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+      } else {
+        throw new Error("Supabase client is not initialized. Please ensure you are online and the Supabase CDN script loaded successfully.");
+      }
+    }
     const [staffRes, attRes, setRes] = await Promise.all([
       supabaseClient.from('staff').select('*'),
       supabaseClient.from('attendance').select('*'),
