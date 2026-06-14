@@ -11,11 +11,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>
-  const supabaseUrl = 'https://utmewblhvqfakzqnlzyk.supabase.co';
-  const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV0bWV3YmxodnFmYWt6cW5senlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0MTkxMDUsImV4cCI6MjA5Njk5NTEwNX0.iYoyTFfkecaAhG2OtwZ0Th4b7b8FxX0HY0_HwmVoTAA';
-  const supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
-</script>
 <script src="supabase.js"></script>
 <script>
 tailwind.config = {
@@ -801,9 +796,9 @@ function settingsToDb(s) {
 async function loadAllData() {
   try {
     const [staffRes, attRes, setRes] = await Promise.all([
-      supabase.from('staff').select('*'),
-      supabase.from('attendance').select('*'),
-      supabase.from('settings').select('*').eq('id', 1).maybeSingle()
+      supabaseClient.from('staff').select('*'),
+      supabaseClient.from('attendance').select('*'),
+      supabaseClient.from('settings').select('*').eq('id', 1).maybeSingle()
     ]);
     if (staffRes.error) throw staffRes.error;
     if (attRes.error) throw attRes.error;
@@ -823,25 +818,25 @@ async function loadAllData() {
 
 async function upsertStaffToDb(staffMember) {
   try {
-    const { error } = await supabase.from('staff').upsert(staffMember);
+    const { error } = await supabaseClient.from('staff').upsert(staffMember);
     if (error) { console.error('Supabase staff upsert error:', error); showToast('Failed to save staff to database.', 'error'); }
   } catch (e) { console.error('Supabase staff upsert error:', e); showToast('Failed to save staff to database.', 'error'); }
 }
 async function deleteStaffFromDb(id) {
   try {
-    const { error } = await supabase.from('staff').delete().eq('id', id);
+    const { error } = await supabaseClient.from('staff').delete().eq('id', id);
     if (error) { console.error('Supabase staff delete error:', error); showToast('Failed to delete staff from database.', 'error'); }
   } catch (e) { console.error('Supabase staff delete error:', e); showToast('Failed to delete staff from database.', 'error'); }
 }
 async function upsertAttendanceToDb(record) {
   try {
-    const { error } = await supabase.from('attendance').upsert(attendanceToDb(record));
+    const { error } = await supabaseClient.from('attendance').upsert(attendanceToDb(record));
     if (error) { console.error('Supabase attendance upsert error:', error); showToast('Failed to save attendance to database.', 'error'); }
   } catch (e) { console.error('Supabase attendance upsert error:', e); showToast('Failed to save attendance to database.', 'error'); }
 }
 async function upsertSettingsToDb(settings) {
   try {
-    const { error } = await supabase.from('settings').upsert(settingsToDb(settings));
+    const { error } = await supabaseClient.from('settings').upsert(settingsToDb(settings));
     if (error) { console.error('Supabase settings upsert error:', error); showToast('Failed to save settings to database.', 'error'); }
   } catch (e) { console.error('Supabase settings upsert error:', e); showToast('Failed to save settings to database.', 'error'); }
 }
@@ -1867,11 +1862,11 @@ async function seedInitialData() {
   }
 
   try {
-    const { error: staffErr } = await supabase.from('staff').upsert(staff);
+    const { error: staffErr } = await supabaseClient.from('staff').upsert(staff);
     if (staffErr) throw staffErr;
-    const { error: attErr } = await supabase.from('attendance').upsert(attendance.map(attendanceToDb));
+    const { error: attErr } = await supabaseClient.from('attendance').upsert(attendance.map(attendanceToDb));
     if (attErr) throw attErr;
-    const { error: setErr } = await supabase.from('settings').upsert(settingsToDb(DEFAULT_SETTINGS));
+    const { error: setErr } = await supabaseClient.from('settings').upsert(settingsToDb(DEFAULT_SETTINGS));
     if (setErr) throw setErr;
 
     staffCache = staff;
